@@ -17,7 +17,12 @@ export function BracketView({ matches, votes, players, onCastVote, onDeleteRound
   const rounds = useMemo(() => groupByRound(matches), [matches]);
   const latestRound = rounds.length > 0 ? rounds[rounds.length - 1][0] : 0;
   const latestRoundSize = rounds.length > 0 ? rounds[rounds.length - 1][1].length : 0;
-  const finalMatch = latestRoundSize === 1 ? rounds[rounds.length - 1][1][0] : null;
+  const prevRoundSize = rounds.length > 1 ? rounds[rounds.length - 2][1].length : 0;
+  // A true Final is a 1-match round preceded by a 2-match Semifinal.
+  // A 1-match Round 1 (or any 1-match round whose predecessor wasn't a Semi)
+  // is a prelim play-in, not the championship.
+  const isFinalRound = latestRoundSize === 1 && prevRoundSize === 2;
+  const finalMatch = isFinalRound ? rounds[rounds.length - 1][1][0] : null;
   const champion = finalMatch?.winner ?? null;
 
   // Index votes by matchId for fast lookup
@@ -51,7 +56,7 @@ export function BracketView({ matches, votes, players, onCastVote, onDeleteRound
             <div key={round} className="flex-1 min-w-[300px] sm:min-w-0">
               <div className="flex items-center justify-between mb-3 px-1">
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {dynamicRoundLabel(round, latestRound, latestRoundSize)}
+                  {dynamicRoundLabel(round, latestRound, latestRoundSize, prevRoundSize)}
                 </div>
                 {!readOnly && onDeleteRound && round === latestRound && (
                   <button

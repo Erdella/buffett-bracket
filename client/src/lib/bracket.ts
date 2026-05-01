@@ -18,14 +18,28 @@ export function groupByRound(matches: BracketMatch[]): [number, BracketMatch[]][
  * Label a round given how many matches are in the latest round.
  * If the latest round has 1 match, it's the Final; 2 → Semifinal; 4 → Quarterfinal.
  * Earlier rounds use "Round N".
+ *
+ * `prevRoundSize` (the round before `latestRound`) disambiguates a 1-match
+ * round: a true Final follows a 2-match Semifinal. A 1-match round whose
+ * predecessor wasn't a 2-match round is a prelim play-in (e.g. a 9-song
+ * album where Round 1 has a single 8-vs-9 matchup).
  */
-export function dynamicRoundLabel(round: number, latestRound: number, latestRoundSize: number): string {
+export function dynamicRoundLabel(
+  round: number,
+  latestRound: number,
+  latestRoundSize: number,
+  prevRoundSize: number = 0,
+): string {
+  const latestIsFinal = latestRoundSize === 1 && prevRoundSize === 2;
+  const latestIsPrelim = latestRoundSize === 1 && !latestIsFinal;
   if (round === latestRound) {
+    if (latestIsPrelim) return "Prelim";
     if (latestRoundSize === 1) return "Final";
     if (latestRoundSize === 2) return "Semifinal";
     if (latestRoundSize === 4) return "Quarterfinal";
-  } else {
-    // Past rounds: count back from latest with size doubling.
+  } else if (latestIsFinal) {
+    // Past rounds when we know the latest is a true Final: count back with
+    // size doubling (Final → Semifinal → Quarterfinal…).
     const offset = latestRound - round;
     const sizeAtRound = latestRoundSize * Math.pow(2, offset);
     if (sizeAtRound === 1) return "Final";

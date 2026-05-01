@@ -32,6 +32,7 @@ export function AlbumBracketEditor({ album }: Props) {
   const rounds = groupByRound(matches);
   const latestRound = rounds.length > 0 ? rounds[rounds.length - 1][0] : 0;
   const latestRoundSize = rounds.length > 0 ? rounds[rounds.length - 1][1].length : 0;
+  const prevRoundSize = rounds.length > 1 ? rounds[rounds.length - 2][1].length : 0;
   const isComplete = status.data?.status === "completed";
   // Anything that mutates state (voting, composing rounds, marking complete,
   // editing personal favorites) is gated behind admin login.
@@ -39,8 +40,14 @@ export function AlbumBracketEditor({ album }: Props) {
 
   // Round is "done" only when every match has all votes in AND a winner is set (no ties).
   const latestRoundDone = latestRound > 0 && isRoundFullyVoted(matches, latestRound, totalPlayers);
-  const nextRoundAvailable = !isComplete && latestRound > 0 && latestRoundDone && latestRoundSize > 1;
-  const canMarkComplete = !isComplete && latestRound > 0 && latestRoundSize === 1 && latestRoundDone;
+  // A 1-match round is only the championship Final if it followed a 2-match
+  // Semifinal. A 1-match Round 1 (or any 1-match round whose predecessor had
+  // more than 2 matches) is a prelim play-in and the bracket should keep
+  // advancing — e.g. a 9-song album: Round 1 prelim (1 match) → Round 2
+  // Quarterfinals (4 matches) when the prelim winner joins the top 7 seeds.
+  const isFinalRound = latestRoundSize === 1 && prevRoundSize === 2;
+  const nextRoundAvailable = !isComplete && latestRound > 0 && latestRoundDone && !isFinalRound;
+  const canMarkComplete = !isComplete && latestRoundDone && isFinalRound;
   const winnersOfLatest = winnersOfRound(matches, latestRound);
 
   const castVote = useMutation({

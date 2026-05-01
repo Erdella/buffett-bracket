@@ -64,24 +64,32 @@ export default function Leaderboard() {
     };
   }).sort((a, b) => b.accuracy - a.accuracy || b.correct - a.correct);
 
-  // ----- Hall of Fame per player: songs they voted to advance the most (top 5)
-  const championedByPlayer = new Map<number, { song: string; count: number }[]>();
+  // ----- Per-player accuracy broken down by album.
+  // For every album the player voted on, count how many of their votes matched
+  // the eventual match winner. Albums with no decided matches (no votes yet)
+  // are skipped.
+  type AlbumAccuracyRow = { album: Album; correct: number; decided: number };
+  const accuracyByPlayer = new Map<number, AlbumAccuracyRow[]>();
   for (const p of players.data) {
-    const tally = new Map<string, number>();
     const myVotes = votes.filter(v => v.playerId === p.id);
+    // Bucket the player's votes by album id (via match → album).
+    const byAlbum = new Map<number, { correct: number; decided: number }>();
     for (const v of myVotes) {
       const m = matchById.get(v.matchId);
       if (!m || !m.winner) continue;
-      // Only count if the song they voted for is the actual advancer
-      if (m.winner === v.songVotedFor) {
-        tally.set(v.songVotedFor, (tally.get(v.songVotedFor) ?? 0) + 1);
-      }
+      const bucket = byAlbum.get(m.albumId) ?? { correct: 0, decided: 0 };
+      bucket.decided++;
+      if (m.winner === v.songVotedFor) bucket.correct++;
+      byAlbum.set(m.albumId, bucket);
     }
-    const top = Array.from(tally.entries())
-      .map(([song, count]) => ({ song, count }))
-      .sort((a, b) => b.count - a.count || a.song.localeCompare(b.song))
-      .slice(0, 5);
-    championedByPlayer.set(p.id, top);
+    const rows: AlbumAccuracyRow[] = [];
+    for (const [albumId, b] of Array.from(byAlbum.entries())) {
+      const album = albumById.get(albumId);
+      if (!album) continue;
+      rows.push({ album, correct: b.correct, decided: b.decided });
+    }
+    rows.sort((a, b) => a.album.orderIndex - b.album.orderIndex);
+    accuracyByPlayer.set(p.id, rows);
   }
 
   // ----- Agreement matrix: for each pair of players, % of shared matches where they voted for the same song
@@ -150,34 +158,50 @@ export default function Leaderboard() {
         </Card>
       </section>
 
-      {/* Per-player Hall of Fame: top championed songs */}
+      {/* Per-player Album Accuracy: how each player did on each album's bracket */}
       <section>
         <h2 className="font-display text-xl font-bold mb-3 flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
-          <Star className="h-5 w-5 text-primary" /> Hall of Fame
+          <Star className="h-5 w-5 text-primary" /> Album Accuracy
         </h2>
-        <p className="text-xs text-muted-foreground mb-3">Top songs each player championed (voted for, and the song advanced).</p>
+        <p className="text-xs text-muted-foreground mb-3">How each player voted album-by-album — picks that matched the family winner.</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {players.data.map(p => {
-            const top = championedByPlayer.get(p.id) ?? [];
+            const rows = accuracyByPlayer.get(p.id) ?? [];
+            const totalCorrect = rows.reduce((s, r) => s + r.correct, 0);
+            const totalDecided = rows.reduce((s, r) => s + r.decided, 0);
+            const overall = totalDecided > 0 ? totalCorrect / totalDecided : 0;
             return (
-              <Card key={p.id}>
+              <Card key={p.id} data-testid={`card-accuracy-${p.id}`}>
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold shrink-0" style={{ backgroundColor: p.color }}>
                       {p.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="font-display text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>{p.name}</div>
+                    <div className="ml-auto text-right">
+                      <div className="font-display text-base font-bold tabular-nums" style={{ fontFamily: "var(--font-display)" }}>
+                        {totalDecided === 0 ? "—" : `${totalCorrect}/${totalDecided}`}
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {totalDecided === 0 ? "no votes" : `${Math.round(overall * 100)}% overall`}
+                      </div>
+                    </div>
                   </div>
-                  {top.length === 0 ? (
-                    <div className="text-xs text-muted-foreground italic">No champions yet — keep voting.</div>
+                  {rows.length === 0 ? (
+                    <div className="text-xs text-muted-foreground italic">No votes yet — jump in once a round is decided.</div>
                   ) : (
                     <ul className="space-y-1.5">
-                      {top.map(({ song, count }) => (
-                        <li key={song} className="text-sm flex items-baseline gap-2">
-                          <span className="font-medium truncate flex-1">{song}</span>
-                          <span className="text-xs font-mono text-muted-foreground shrink-0">×{count}</span>
-                        </li>
-                      ))}
+                      {rows.map(({ album, correct, decided }) => {
+                        const pct = decided > 0 ? correct / decided : 0;
+                        return (
+                          <li key={album.id} className="text-sm flex items-baseline gap-2">
+                            <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{album.year}</span>
+                            <span className="font-medium truncate flex-1">{album.title}</span>
+                            <span className="text-xs font-mono text-muted-foreground shrink-0 tabular-nums">{correct}/{decided}</span>
+                            <span className="text-xs font-semibold text-primary shrink-0 tabular-nums w-10 text-right">{Math.round(pct * 100)}%</span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </CardContent>

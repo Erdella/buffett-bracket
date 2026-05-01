@@ -22,6 +22,8 @@ export const players = sqliteTable("players", {
   name: text("name").notNull(),
   color: text("color").notNull().default("#01696F"),
   orderIndex: integer("order_index").notNull().default(0),
+  // Optional uploaded avatar. URL path served by the app (e.g. /uploads/p3-...png).
+  photoUrl: text("photo_url"),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });

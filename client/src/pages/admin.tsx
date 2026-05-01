@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, assetUrl } from "@/lib/queryClient";
 import type { Album, Player, Settings, AlbumStatus } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Plus, Save, Lock } from "lucide-react";
-import { useState } from "react";
+import { Trash2, Plus, Save, Lock, Camera, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -169,15 +170,85 @@ function PlayerRow({
 }) {
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
   const dirty = name !== player.name || color !== player.color;
+
+  // Upload uses multipart form-data, so we hit the endpoint directly
+  // (apiRequest only handles JSON bodies).
+  async function uploadPhoto(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("photo", file);
+      const res = await fetch(assetUrl(`/api/players/${player.id}/photo`)!, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.text()) || `${res.status}`);
+      await queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+      toast({ title: "Photo updated", description: `${player.name}'s profile photo was uploaded.` });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e?.message ?? "Try a smaller image.", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function clearPhoto() {
+    try {
+      await apiRequest("DELETE", `/api/players/${player.id}/photo`, undefined);
+      await queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+    } catch (e: any) {
+      toast({ title: "Could not remove photo", description: e?.message ?? "", variant: "destructive" });
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-card-border bg-card" data-testid={`row-player-${player.id}`}>
-      <div
-        className="h-9 w-9 rounded-full flex items-center justify-center text-white font-semibold shrink-0"
-        style={{ backgroundColor: color }}
-      >
-        {name.charAt(0).toUpperCase()}
+      <div className="relative shrink-0 group">
+        <PlayerAvatar
+          player={{ ...player, name, color }}
+          sizeClass="h-10 w-10"
+          textSizeClass="text-sm"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="absolute inset-0 rounded-full flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          aria-label={`Upload photo for ${player.name}`}
+          data-testid={`button-upload-photo-${player.id}`}
+          title="Upload photo"
+        >
+          <Camera className="h-4 w-4 text-white" />
+        </button>
+        {player.photoUrl && (
+          <button
+            type="button"
+            onClick={clearPhoto}
+            className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center shadow ring-1 ring-background"
+            aria-label={`Remove photo for ${player.name}`}
+            title="Remove photo"
+            data-testid={`button-remove-photo-${player.id}`}
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) uploadPhoto(f);
+          }}
+          data-testid={`input-photo-${player.id}`}
+        />
       </div>
       <Input
         value={name}

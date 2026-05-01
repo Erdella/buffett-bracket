@@ -11,6 +11,7 @@ export interface Player {
   name: string;
   color: string;
   orderIndex: number;
+  photoUrl: string | null;
 }
 
 export interface Settings {

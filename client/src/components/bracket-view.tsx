@@ -3,6 +3,7 @@ import type { BracketMatch, MatchVote, Player } from "@/lib/types";
 import { dynamicRoundLabel, groupByRound } from "@/lib/bracket";
 import { cn } from "@/lib/utils";
 import { Trophy, Trash2 } from "lucide-react";
+import { PlayerAvatar } from "@/components/player-avatar";
 
 interface Props {
   matches: BracketMatch[];
@@ -118,6 +119,7 @@ function MatchCard({
         tally={tallyA}
         isWinner={!!match.winner && match.winner === match.songA}
         eliminated={!!match.winner && match.winner !== match.songA}
+        voters={players.filter(p => votes.find(v => v.playerId === p.id && v.songVotedFor === match.songA))}
       />
       <div className="border-t border-border/60" />
       <SlotRow
@@ -125,6 +127,7 @@ function MatchCard({
         tally={tallyB}
         isWinner={!!match.winner && match.winner === match.songB}
         eliminated={!!match.winner && match.winner !== match.songB}
+        voters={players.filter(p => votes.find(v => v.playerId === p.id && v.songVotedFor === match.songB))}
       />
 
       {/* Voting strip */}
@@ -173,7 +176,6 @@ function PlayerVoteChip({
     if (votedFor === songA) return songB;
     return null;
   }
-  const initials = player.name.charAt(0).toUpperCase();
   const isA = votedFor === songA;
   const isB = votedFor === songB;
   const noVote = !votedFor;
@@ -196,12 +198,7 @@ function PlayerVoteChip({
       aria-label={`${player.name} ${noVote ? "no vote" : `voted for ${votedFor}`}`}
       title={noVote ? `${player.name}: tap to vote for ${songA}` : `${player.name}: voted for ${votedFor}`}
     >
-      <span
-        className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0"
-        style={{ backgroundColor: player.color }}
-      >
-        {initials}
-      </span>
+      <PlayerAvatar player={player} sizeClass="h-5 w-5" textSizeClass="text-[10px]" />
       <span className="text-[10px] font-semibold leading-none whitespace-nowrap" style={{ color: noVote ? undefined : player.color }}>
         {noVote ? player.name : isA ? "A" : "B"}
       </span>
@@ -210,12 +207,13 @@ function PlayerVoteChip({
 }
 
 function SlotRow({
-  song, tally, isWinner, eliminated,
+  song, tally, isWinner, eliminated, voters,
 }: {
   song: string | null;
   tally: number;
   isWinner: boolean;
   eliminated: boolean;
+  voters: Player[];
 }) {
   if (!song) {
     return <div className="px-3 py-2.5 text-xs text-muted-foreground italic">— TBD —</div>;
@@ -225,7 +223,7 @@ function SlotRow({
       className={cn(
         "px-3 py-2.5 flex items-center gap-2",
         isWinner && "bg-primary/15",
-        eliminated && "opacity-50 line-through",
+        eliminated && "opacity-50",
       )}
       data-testid={`slot-${song}`}
     >
@@ -235,8 +233,29 @@ function SlotRow({
           isWinner ? "bg-primary" : "bg-muted-foreground/30",
         )}
       />
-      <span className={cn("text-sm leading-tight flex-1", isWinner && "font-semibold")}>{song}</span>
-      {tally > 0 && (
+      <span
+        className={cn(
+          "text-sm leading-tight flex-1 min-w-0 truncate",
+          isWinner && "font-semibold",
+          eliminated && "line-through",
+        )}
+      >
+        {song}
+      </span>
+      {voters.length > 0 && (
+        <div className="flex -space-x-1.5 shrink-0" aria-label={`Voted by ${voters.map(v => v.name).join(", ")}`}>
+          {voters.map(v => (
+            <PlayerAvatar
+              key={v.id}
+              player={v}
+              sizeClass="h-6 w-6"
+              textSizeClass="text-[10px]"
+              className="ring-2 ring-card"
+            />
+          ))}
+        </div>
+      )}
+      {tally > 0 && voters.length === 0 && (
         <span className={cn(
           "text-xs font-mono shrink-0 px-1.5 rounded",
           isWinner ? "bg-primary/20 text-primary" : "text-muted-foreground bg-muted",

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BracketView } from "@/components/bracket-view";
 import { RoundComposer } from "@/components/round-composer";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { groupByRound, isRoundFullyVoted, winnersOfRound } from "@/lib/bracket";
 import { Music, Users, RotateCcw, CheckCircle2, Undo2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -257,12 +258,7 @@ function PerPlayerPicks({
           return (
             <Card key={p.id} className="overflow-hidden">
               <CardContent className="p-4 flex items-center gap-3">
-                <div
-                  className="h-10 w-10 rounded-full shrink-0 flex items-center justify-center text-white font-semibold text-sm"
-                  style={{ backgroundColor: p.color }}
-                >
-                  {p.name.charAt(0).toUpperCase()}
-                </div>
+                <PlayerAvatar player={p} sizeClass="h-10 w-10" textSizeClass="text-sm" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm" data-testid={`text-player-${p.id}`}>{p.name}</div>
                   {readOnly ? (

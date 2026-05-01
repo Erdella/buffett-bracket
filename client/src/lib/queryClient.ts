@@ -2,6 +2,17 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
+/**
+ * Prefix a server-served asset path (e.g. "/uploads/p3-...png") with the deploy
+ * proxy when running on pplx.app. On the user's self-hosted Docker box, API_BASE
+ * is empty so this is a no-op.
+ */
+export function assetUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined;
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE}${path}`;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;

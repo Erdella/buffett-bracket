@@ -3,6 +3,7 @@ import type { Album, AlbumResult, AlbumStatus, BracketMatch, MatchVote, Player }
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, Heart, Target, Star } from "lucide-react";
 import { Link } from "wouter";
+import { PlayerAvatar } from "@/components/player-avatar";
 
 interface VotesPayload {
   matches: BracketMatch[];
@@ -134,12 +135,7 @@ export default function Leaderboard() {
                 <div className="font-display text-2xl font-bold w-7 text-center text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>
                   {i + 1}
                 </div>
-                <div
-                  className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold shrink-0"
-                  style={{ backgroundColor: player.color }}
-                >
-                  {player.name.charAt(0).toUpperCase()}
-                </div>
+                <PlayerAvatar player={player} sizeClass="h-10 w-10" textSizeClass="text-base" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold">{player.name}</div>
                   <div className="text-xs text-muted-foreground">
@@ -174,9 +170,7 @@ export default function Leaderboard() {
               <Card key={p.id} data-testid={`card-accuracy-${p.id}`}>
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold shrink-0" style={{ backgroundColor: p.color }}>
-                      {p.name.charAt(0).toUpperCase()}
-                    </div>
+                    <PlayerAvatar player={p} sizeClass="h-9 w-9" textSizeClass="text-sm" />
                     <div className="font-display text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>{p.name}</div>
                     <div className="ml-auto text-right">
                       <div className="font-display text-base font-bold tabular-nums" style={{ fontFamily: "var(--font-display)" }}>
@@ -260,10 +254,10 @@ export default function Leaderboard() {
               {agreementMatrix.map(({ a, b, shared, agreed, pct }) => (
                 <div key={`${a.id}-${b.id}`} className="px-4 py-3 flex items-center gap-3">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: a.color }}>{a.name.charAt(0).toUpperCase()}</div>
+                    <PlayerAvatar player={a} sizeClass="h-7 w-7" />
                     <span className="text-sm font-medium truncate">{a.name}</span>
                     <span className="text-xs text-muted-foreground">+</span>
-                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: b.color }}>{b.name.charAt(0).toUpperCase()}</div>
+                    <PlayerAvatar player={b} sizeClass="h-7 w-7" />
                     <span className="text-sm font-medium truncate">{b.name}</span>
                   </div>
                   <div className="text-right shrink-0">
@@ -296,9 +290,7 @@ export default function Leaderboard() {
               <Card key={p.id}>
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold shrink-0" style={{ backgroundColor: p.color }}>
-                      {p.name.charAt(0).toUpperCase()}
-                    </div>
+                    <PlayerAvatar player={p} sizeClass="h-9 w-9" textSizeClass="text-sm" />
                     <div className="font-display text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>{p.name}</div>
                     <div className="ml-auto text-xs text-muted-foreground">{myPicks.length} picks</div>
                   </div>

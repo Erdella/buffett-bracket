@@ -1,5 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "node:http";
+import express from "express";
+import path from "node:path";
+import fs from "node:fs";
+import multer from "multer";
 import { storage, db } from "./storage";
 import {
   insertPlayerSchema, insertAlbumStatusSchema,
@@ -9,6 +13,27 @@ import { sql, eq } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import seedAlbums from "./seed-albums";
+
+// Uploaded player avatars live next to data.db (cwd) so they share the
+// Docker volume mount and survive image upgrades.
+const UPLOAD_DIR = path.resolve("uploads");
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (req, file, cb) => {
+      const ext = (path.extname(file.originalname) || ".jpg").toLowerCase().slice(0, 5);
+      const safeExt = /^\.(jpg|jpeg|png|webp|gif)$/.test(ext) ? ext : ".jpg";
+      cb(null, `p${req.params.id}-${Date.now()}${safeExt}`);
+    },
+  }),
+  limits: { fileSize: 4 * 1024 * 1024 }, // 4 MB
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPEG, PNG, WEBP, or GIF images are allowed."));
+  },
+});
 
 // --- Admin auth ---
 // Single-admin model: one bcrypt hash in env. The hash MUST be set; if it's
@@ -46,8 +71,18 @@ async function ensureSchemaAndSeed() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     color TEXT NOT NULL DEFAULT '#01696F',
-    order_index INTEGER NOT NULL DEFAULT 0
+    order_index INTEGER NOT NULL DEFAULT 0,
+    photo_url TEXT
   )`);
+  // Add photo_url column to existing player tables (idempotent).
+  try {
+    const cols = db.all(sql`PRAGMA table_info(players)`) as Array<{ name: string }>;
+    if (!cols.some(c => c.name === "photo_url")) {
+      db.run(sql`ALTER TABLE players ADD COLUMN photo_url TEXT`);
+    }
+  } catch (e) {
+    console.warn("Could not check/add photo_url column:", e);
+  }
   db.run(sql`CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     current_album_id INTEGER
@@ -118,6 +153,9 @@ async function ensureSchemaAndSeed() {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await ensureSchemaAndSeed();
 
+  // Serve uploaded avatars publicly (read-only).
+  app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "7d", immutable: false }));
+
   // Block mutations site-wide unless logged in as admin.
   app.use(requireAdminForMutations);
 
@@ -185,6 +223,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/players/:id", async (req, res) => {
     await storage.deletePlayer(Number(req.params.id));
     res.json({ ok: true });
+  });
+  // Upload a profile photo for a player. Multer parses the multipart form;
+  // requireAdminForMutations already gated this above.
+  app.post("/api/players/:id/photo", photoUpload.single("photo"), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const player = (await storage.listPlayers()).find(p => p.id === id);
+      if (!player) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: "Player not found" });
+      }
+      if (!req.file) return res.status(400).json({ error: "No image uploaded." });
+      // Best-effort delete of the previous photo file.
+      if (player.photoUrl?.startsWith("/uploads/")) {
+        const oldPath = path.join(UPLOAD_DIR, path.basename(player.photoUrl));
+        fs.unlink(oldPath, () => {});
+      }
+      const photoUrl = `/uploads/${req.file.filename}`;
+      const updated = await storage.updatePlayer(id, { photoUrl });
+      res.json(updated);
+    } catch (e: any) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      res.status(400).json({ error: e?.message ?? "Upload failed." });
+    }
+  });
+  app.delete("/api/players/:id/photo", async (req, res) => {
+    const id = Number(req.params.id);
+    const player = (await storage.listPlayers()).find(p => p.id === id);
+    if (!player) return res.status(404).json({ error: "Player not found" });
+    if (player.photoUrl?.startsWith("/uploads/")) {
+      const oldPath = path.join(UPLOAD_DIR, path.basename(player.photoUrl));
+      fs.unlink(oldPath, () => {});
+    }
+    const updated = await storage.updatePlayer(id, { photoUrl: null });
+    res.json(updated);
   });
 
   // --- settings ---

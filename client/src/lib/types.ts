@@ -4,6 +4,7 @@ export interface Album {
   year: number;
   orderIndex: number;
   tracks: string[];
+  coverUrl: string | null;
 }
 
 export interface Player {

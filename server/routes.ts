@@ -19,21 +19,25 @@ import seedAlbums from "./seed-albums";
 const UPLOAD_DIR = path.resolve("uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const photoUpload = multer({
-  storage: multer.diskStorage({
-    destination: UPLOAD_DIR,
-    filename: (req, file, cb) => {
-      const ext = (path.extname(file.originalname) || ".jpg").toLowerCase().slice(0, 5);
-      const safeExt = /^\.(jpg|jpeg|png|webp|gif)$/.test(ext) ? ext : ".jpg";
-      cb(null, `p${req.params.id}-${Date.now()}${safeExt}`);
+function imageUploader(prefix: string) {
+  return multer({
+    storage: multer.diskStorage({
+      destination: UPLOAD_DIR,
+      filename: (req, file, cb) => {
+        const ext = (path.extname(file.originalname) || ".jpg").toLowerCase().slice(0, 5);
+        const safeExt = /^\.(jpg|jpeg|png|webp|gif)$/.test(ext) ? ext : ".jpg";
+        cb(null, `${prefix}${req.params.id}-${Date.now()}${safeExt}`);
+      },
+    }),
+    limits: { fileSize: 6 * 1024 * 1024 }, // 6 MB ceiling
+    fileFilter: (_req, file, cb) => {
+      if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+      else cb(new Error("Only JPEG, PNG, WEBP, or GIF images are allowed."));
     },
-  }),
-  limits: { fileSize: 4 * 1024 * 1024 }, // 4 MB
-  fileFilter: (_req, file, cb) => {
-    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error("Only JPEG, PNG, WEBP, or GIF images are allowed."));
-  },
-});
+  });
+}
+const photoUpload = imageUploader("p");
+const coverUpload = imageUploader("album-");
 
 // --- Admin auth ---
 // Single-admin model: one bcrypt hash in env. The hash MUST be set; if it's
@@ -65,8 +69,18 @@ async function ensureSchemaAndSeed() {
     title TEXT NOT NULL,
     year INTEGER NOT NULL,
     order_index INTEGER NOT NULL,
-    tracks TEXT NOT NULL
+    tracks TEXT NOT NULL,
+    cover_url TEXT
   )`);
+  // Add cover_url column to existing album tables (idempotent).
+  try {
+    const cols = db.all(sql`PRAGMA table_info(albums)`) as Array<{ name: string }>;
+    if (!cols.some(c => c.name === "cover_url")) {
+      db.run(sql`ALTER TABLE albums ADD COLUMN cover_url TEXT`);
+    }
+  } catch (e) {
+    console.warn("Could not check/add cover_url column:", e);
+  }
   db.run(sql`CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -199,6 +213,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const a = await storage.getAlbum(id);
     if (!a) return res.status(404).json({ error: "Album not found" });
     res.json({ ...a, tracks: JSON.parse(a.tracks) as string[] });
+  });
+  // Upload an album cover. Admin-only via the global mutation gate above.
+  app.post("/api/albums/:id/cover", coverUpload.single("cover"), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const album = await storage.getAlbum(id);
+      if (!album) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: "Album not found" });
+      }
+      if (!req.file) return res.status(400).json({ error: "No image uploaded." });
+      if (album.coverUrl?.startsWith("/uploads/")) {
+        const oldPath = path.join(UPLOAD_DIR, path.basename(album.coverUrl));
+        fs.unlink(oldPath, () => {});
+      }
+      const coverUrl = `/uploads/${req.file.filename}`;
+      const updated = await storage.updateAlbum(id, { coverUrl });
+      res.json({ ...updated, tracks: JSON.parse(updated!.tracks) as string[] });
+    } catch (e: any) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      res.status(400).json({ error: e?.message ?? "Upload failed." });
+    }
+  });
+  app.delete("/api/albums/:id/cover", async (req, res) => {
+    const id = Number(req.params.id);
+    const album = await storage.getAlbum(id);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+    if (album.coverUrl?.startsWith("/uploads/")) {
+      const oldPath = path.join(UPLOAD_DIR, path.basename(album.coverUrl));
+      fs.unlink(oldPath, () => {});
+    }
+    const updated = await storage.updateAlbum(id, { coverUrl: null });
+    res.json({ ...updated, tracks: JSON.parse(updated!.tracks) as string[] });
   });
 
   // --- players ---

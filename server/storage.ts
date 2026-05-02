@@ -22,6 +22,7 @@ export interface IStorage {
   // albums
   listAlbums(): Promise<Album[]>;
   getAlbum(id: number): Promise<Album | undefined>;
+  updateAlbum(id: number, patch: Partial<InsertAlbum>): Promise<Album | undefined>;
   createAlbum(a: InsertAlbum): Promise<Album>;
 
   // players
@@ -70,6 +71,9 @@ export class DatabaseStorage implements IStorage {
   }
   async createAlbum(a: InsertAlbum): Promise<Album> {
     return db.insert(albums).values(a).returning().get();
+  }
+  async updateAlbum(id: number, patch: Partial<InsertAlbum>): Promise<Album | undefined> {
+    return db.update(albums).set(patch).where(eq(albums.id, id)).returning().get();
   }
 
   // ----- players -----

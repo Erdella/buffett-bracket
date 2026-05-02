@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Trophy, Hourglass, Music, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
+import { AlbumCover } from "@/components/album-cover";
 
 export default function Albums() {
   const [q, setQ] = useState("");
@@ -59,15 +60,24 @@ export default function Albums() {
                 isCurrent && "ring-2 ring-primary ring-offset-2 ring-offset-background",
               )}>
                 <CardContent className="p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-xs text-muted-foreground font-mono">{album.year}</div>
-                    <StatusPill completed={completed} inProgress={inProgress} isCurrent={isCurrent} />
-                  </div>
-                  <div className="font-display font-bold text-base leading-tight mb-2" style={{ fontFamily: "var(--font-display)" }}>
-                    {album.title}
-                  </div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Music className="h-3 w-3" /> {album.tracks.length} tracks
+                  <div className="flex items-start gap-3">
+                    {/* Left: title + meta */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-muted-foreground font-mono">{album.year}</div>
+                      <div className="font-display font-bold text-base leading-tight mt-1 mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                        {album.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Music className="h-3 w-3" /> {album.tracks.length} tracks
+                      </div>
+                    </div>
+                    {/* Right: status pill on top, cover below it.
+                        For completed albums the "Done" pill is shown and the cover
+                        slides down beneath it; for others the cover sits at the top. */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <StatusPill completed={completed} inProgress={inProgress} isCurrent={isCurrent} />
+                      <AlbumCover album={album} sizeClass="h-16 w-16" />
+                    </div>
                   </div>
                   {completed && st?.winningSong && (
                     <div className="mt-3 pt-3 border-t border-border/60">

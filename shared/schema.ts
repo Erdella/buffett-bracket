@@ -10,6 +10,8 @@ export const albums = sqliteTable("albums", {
   orderIndex: integer("order_index").notNull(),
   // tracks stored as JSON string array of song titles
   tracks: text("tracks").notNull(),
+  // Optional uploaded album cover (URL path served by the app, e.g. /uploads/album-3-...jpg).
+  coverUrl: text("cover_url"),
 });
 
 export const insertAlbumSchema = createInsertSchema(albums).omit({ id: true });

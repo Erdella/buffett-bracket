@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlbumBracketEditor } from "@/components/album-bracket-editor";
+import { AlbumCover } from "@/components/album-cover";
 import { Music, ArrowRight, Sparkles } from "lucide-react";
 
 export default function NowPlaying() {
@@ -52,26 +53,35 @@ export default function NowPlaying() {
       <Card className="overflow-hidden border-card-border">
         <div className="sun-gradient h-2 w-full" />
         <CardContent className="p-5 sm:p-7">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
-              <Sparkles className="h-3 w-3 mr-1" /> Now Playing
-            </Badge>
-            {isComplete && <Badge className="bg-primary text-primary-foreground">Completed</Badge>}
-          </div>
-          <h1
-            className="font-display font-bold leading-tight"
-            style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.75rem, 4vw, 2.5rem)" }}
-            data-testid="text-current-album-title"
-          >
-            {currentAlbum.title}
-          </h1>
-          <div className="text-muted-foreground text-sm mt-1">
-            {currentAlbum.year} • {currentAlbum.tracks.length} tracks
-          </div>
-          <div className="mt-4">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/albums/${currentAlbum.id}`}>View album page <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
-            </Button>
+          <div className="flex gap-5 sm:gap-7 items-start">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+                  <Sparkles className="h-3 w-3 mr-1" /> Now Playing
+                </Badge>
+                {isComplete && <Badge className="bg-primary text-primary-foreground">Completed</Badge>}
+              </div>
+              <h1
+                className="font-display font-bold leading-tight"
+                style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.75rem, 4vw, 2.5rem)" }}
+                data-testid="text-current-album-title"
+              >
+                {currentAlbum.title}
+              </h1>
+              <div className="text-muted-foreground text-sm mt-1">
+                {currentAlbum.year} • {currentAlbum.tracks.length} tracks
+              </div>
+              <div className="mt-4">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/albums/${currentAlbum.id}`}>View album page <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
+                </Button>
+              </div>
+            </div>
+            <AlbumCover
+              album={currentAlbum}
+              sizeClass="h-24 w-24 sm:h-32 sm:w-32"
+              roundedClass="rounded-lg"
+            />
           </div>
         </CardContent>
       </Card>

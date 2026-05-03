@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlbumBracketEditor } from "@/components/album-bracket-editor";
 import { AlbumCover } from "@/components/album-cover";
-import { ArrowLeft, Trophy, Music, Camera, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,7 @@ export default function AlbumDetail() {
 
   const album = useQuery<Album>({ queryKey: ["/api/albums", id], enabled: !!id });
   const status = useQuery<AlbumStatus | null>({ queryKey: ["/api/albums", id, "status"], enabled: !!id });
+  const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
   const auth = useAuth();
 
   if (!album.data) return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -25,8 +26,48 @@ export default function AlbumDetail() {
   const st = status.data;
   const isComplete = st?.status === "completed";
 
+  // Prev/next album navigation, ordered chronologically by orderIndex.
+  const ordered = (albums.data ?? []).slice().sort((x, y) => x.orderIndex - y.orderIndex);
+  const idx = ordered.findIndex(x => x.id === a.id);
+  const prev = idx > 0 ? ordered[idx - 1] : null;
+  const next = idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1] : null;
+
   return (
     <div className="space-y-6">
+      {/* Prev / next album navigation */}
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="min-w-0 flex-1">
+          {prev ? (
+            <Link
+              href={`/albums/${prev.id}`}
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground truncate"
+              data-testid="link-prev-album"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                <span className="text-[10px] uppercase tracking-wider mr-1.5">Previous</span>
+                <span className="font-semibold">{prev.title}</span>
+              </span>
+            </Link>
+          ) : <span />}
+        </div>
+        <div className="min-w-0 flex-1 text-right">
+          {next ? (
+            <Link
+              href={`/albums/${next.id}`}
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground truncate justify-end max-w-full"
+              data-testid="link-next-album"
+            >
+              <span className="truncate">
+                <span className="text-[10px] uppercase tracking-wider mr-1.5">Next</span>
+                <span className="font-semibold">{next.title}</span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0" />
+            </Link>
+          ) : <span />}
+        </div>
+      </div>
+
       <Button variant="ghost" size="sm" asChild data-testid="button-back-albums">
         <Link href="/albums"><ArrowLeft className="h-4 w-4 mr-1.5" /> All albums</Link>
       </Button>

@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import type { Album, AlbumStatus } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AlbumCover } from "@/components/album-cover";
 import { Trophy, ChevronRight } from "lucide-react";
 
 export default function Results() {
@@ -37,7 +38,8 @@ export default function Results() {
             <Link key={album.id} href={`/albums/${album.id}`} data-testid={`link-completed-${album.id}`} className="block">
               <Card className="hover-elevate active-elevate h-full">
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3">
+                    <AlbumCover album={album} sizeClass="h-14 w-14" roundedClass="rounded-md" />
                     <div className="min-w-0 flex-1">
                       <div className="text-xs text-muted-foreground font-mono">{album.year}</div>
                       <div className="font-display font-bold leading-tight mt-0.5 truncate" style={{ fontFamily: "var(--font-display)" }}>
@@ -68,12 +70,13 @@ export default function Results() {
             {inProgress.map(({ album }) => (
               <Link key={album.id} href={`/albums/${album.id}`} className="block">
                 <Card className="hover-elevate active-elevate">
-                  <CardContent className="p-4 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <AlbumCover album={album} sizeClass="h-12 w-12" roundedClass="rounded-md" />
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs text-muted-foreground font-mono">{album.year}</div>
                       <div className="font-semibold truncate">{album.title}</div>
                     </div>
-                    <Badge variant="secondary" className="text-[10px]">In progress</Badge>
+                    <Badge variant="secondary" className="text-[10px] shrink-0">In progress</Badge>
                   </CardContent>
                 </Card>
               </Link>
@@ -88,6 +91,7 @@ export default function Results() {
             {upcoming.map(({ album }) => (
               <Link key={album.id} href={`/albums/${album.id}`} className="block px-4 py-3 hover-elevate active-elevate flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0 flex items-center gap-3">
+                  <AlbumCover album={album} sizeClass="h-10 w-10" roundedClass="rounded-md" />
                   <span className="font-mono text-xs text-muted-foreground w-12 shrink-0">{album.year}</span>
                   <span className="truncate">{album.title}</span>
                 </div>

@@ -267,7 +267,8 @@ function PerPlayerPicks({
                     </div>
                   ) : (
                     <select
-                      className="mt-1 w-full bg-transparent text-sm border border-input rounded-md px-2 py-1.5 hover-elevate active-elevate"
+                      className="mt-1 w-full bg-background text-foreground text-sm border border-input rounded-md px-2 py-1.5 hover-elevate active-elevate [&>option]:bg-background [&>option]:text-foreground"
+                      style={{ colorScheme: 'light dark' }}
                       value={r?.songTitle ?? ""}
                       data-testid={`select-pick-${p.id}`}
                       onChange={e => {

@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import type { Album, AlbumStatus } from "@/lib/types";
+import type { Album, AlbumStatus, AlbumResult, Player } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlbumBracketEditor } from "@/components/album-bracket-editor";
 import { AlbumCover } from "@/components/album-cover";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,6 +20,8 @@ export default function AlbumDetail() {
   const album = useQuery<Album>({ queryKey: ["/api/albums", id], enabled: !!id });
   const status = useQuery<AlbumStatus | null>({ queryKey: ["/api/albums", id, "status"], enabled: !!id });
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
+  const players = useQuery<Player[]>({ queryKey: ["/api/players"] });
+  const results = useQuery<AlbumResult[]>({ queryKey: ["/api/albums", id, "results"], enabled: !!id });
   const auth = useAuth();
 
   if (!album.data) return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -112,13 +115,35 @@ export default function AlbumDetail() {
         </h2>
         <Card>
           <CardContent className="p-0 divide-y divide-border/60">
-            {a.tracks.map((t, i) => (
-              <div key={i} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                <span className="text-xs text-muted-foreground font-mono w-6 shrink-0">{String(i + 1).padStart(2, "0")}</span>
-                <span className="truncate flex-1">{t}</span>
-                {st?.winningSong === t && <Trophy className="h-3.5 w-3.5 text-primary shrink-0" />}
-              </div>
-            ))}
+            {a.tracks.map((t, i) => {
+              // Find every player whose personal favorite matches this track—
+              // we surface their avatars on the right of the row so it's easy
+              // to see at a glance who loves what.
+              const fans = (results.data ?? [])
+                .filter(r => r.songTitle === t)
+                .map(r => (players.data ?? []).find(p => p.id === r.playerId))
+                .filter((p): p is Player => !!p);
+              const isWinner = st?.winningSong === t;
+              return (
+                <div key={i} className="px-4 py-2.5 flex items-center gap-3 text-sm">
+                  <span className="text-xs text-muted-foreground font-mono w-6 shrink-0">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="truncate flex-1">{t}</span>
+                  {fans.length > 0 && (
+                    <div className="flex items-center gap-1 shrink-0" data-testid={`fans-track-${i}`}>
+                      {fans.map(p => (
+                        <PlayerAvatar
+                          key={p.id}
+                          player={p}
+                          sizeClass="h-6 w-6"
+                          textSizeClass="text-[10px]"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {isWinner && <Trophy className="h-3.5 w-3.5 text-primary shrink-0" />}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       </section>

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Album, AlbumResult, AlbumStatus, BracketMatch, MatchVote, Player } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trophy, Heart, Target, Star } from "lucide-react";
+import { Trophy, Heart, Target, Star, ThumbsDown } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { AlbumCover } from "@/components/album-cover";
@@ -93,6 +93,27 @@ export default function Leaderboard() {
     rows.sort((a, b) => a.album.orderIndex - b.album.orderIndex);
     accuracyByPlayer.set(p.id, rows);
   }
+
+  // ----- Wall of Shame: the three lowest (player, album) accuracy rows.
+  // Same data as Album Accuracy, just flattened across every player and
+  // sorted ascending by percentage. We only keep rows with at least one
+  // decided match so an empty bracket can’t be “worst” by default.
+  type ShameEntry = { player: Player; album: Album; correct: number; decided: number; pct: number };
+  const shameEntries: ShameEntry[] = [];
+  for (const p of players.data) {
+    for (const r of accuracyByPlayer.get(p.id) ?? []) {
+      if (r.decided <= 0) continue;
+      shameEntries.push({
+        player: p,
+        album: r.album,
+        correct: r.correct,
+        decided: r.decided,
+        pct: r.correct / r.decided,
+      });
+    }
+  }
+  shameEntries.sort((a, b) => a.pct - b.pct || a.correct - b.correct);
+  const wallOfShame = shameEntries.slice(0, 3);
 
   // ----- Agreement matrix: for each pair of players, % of shared matches where they voted for the same song
   const agreementMatrix: { a: Player; b: Player; shared: number; agreed: number; pct: number }[] = [];
@@ -205,6 +226,49 @@ export default function Leaderboard() {
           })}
         </div>
       </section>
+
+      {/* Wall of Shame — the three lowest album-accuracy entries. */}
+      {wallOfShame.length > 0 && (
+        <section data-testid="section-wall-of-shame">
+          <h2 className="font-display text-xl font-bold mb-3 flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
+            <ThumbsDown className="h-5 w-5 text-destructive" /> Wall of Shame
+          </h2>
+          <p className="text-xs text-muted-foreground mb-3">The three lowest album-accuracy showings. No shade — just keeping score.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {wallOfShame.map((entry, i) => (
+              <Link
+                key={`${entry.player.id}-${entry.album.id}`}
+                href={`/albums/${entry.album.id}`}
+                className="block"
+                data-testid={`shame-${i + 1}`}
+              >
+                <Card className="hover-elevate active-elevate h-full border-destructive/30">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="font-display text-2xl font-bold w-7 text-center text-destructive shrink-0" style={{ fontFamily: "var(--font-display)" }}>
+                        {i + 1}
+                      </div>
+                      <PlayerAvatar player={entry.player} sizeClass="h-10 w-10" textSizeClass="text-base" />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm truncate">{entry.player.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          <span className="font-mono">{entry.album.year}</span> · {entry.album.title}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-display text-lg font-bold tabular-nums text-destructive" style={{ fontFamily: "var(--font-display)" }}>
+                          {Math.round(entry.pct * 100)}%
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground tabular-nums">{entry.correct}/{entry.decided}</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Family album winners */}
       <section>

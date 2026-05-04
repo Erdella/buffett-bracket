@@ -211,8 +211,9 @@ export function AlbumBracketEditor({ album }: Props) {
         </Card>
       )}
 
-      {/* Per-player favorites */}
-      {playerList.length > 0 && (
+      {/* Per-player favorites — admin/editor only. Non-admins see favorites
+          inline on the tracklist (small avatar next to each track). */}
+      {isAdmin && playerList.length > 0 && (
         <PerPlayerPicks
           albumId={albumId}
           tracks={album.tracks}

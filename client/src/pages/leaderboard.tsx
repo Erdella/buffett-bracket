@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Album, AlbumResult, AlbumStatus, BracketMatch, MatchVote, Player } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trophy, Heart, Target, Star, ThumbsDown } from "lucide-react";
+import { Trophy, Heart, Target, Star, ThumbsDown, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { AlbumCover } from "@/components/album-cover";
@@ -94,16 +94,16 @@ export default function Leaderboard() {
     accuracyByPlayer.set(p.id, rows);
   }
 
-  // ----- Wall of Shame: the three lowest (player, album) accuracy rows.
-  // Same data as Album Accuracy, just flattened across every player and
-  // sorted ascending by percentage. We only keep rows with at least one
-  // decided match so an empty bracket can’t be “worst” by default.
-  type ShameEntry = { player: Player; album: Album; correct: number; decided: number; pct: number };
-  const shameEntries: ShameEntry[] = [];
+  // ----- The Lost Shakers of Salt: the three lowest (player, album)
+  // accuracy rows. Same data as Album Accuracy, just flattened across every
+  // player and sorted ascending by percentage. We only keep rows with at
+  // least one decided match so an empty bracket can’t be “worst” by default.
+  type AccuracyEntry = { player: Player; album: Album; correct: number; decided: number; pct: number };
+  const allEntries: AccuracyEntry[] = [];
   for (const p of players.data) {
     for (const r of accuracyByPlayer.get(p.id) ?? []) {
       if (r.decided <= 0) continue;
-      shameEntries.push({
+      allEntries.push({
         player: p,
         album: r.album,
         correct: r.correct,
@@ -112,8 +112,23 @@ export default function Leaderboard() {
       });
     }
   }
-  shameEntries.sort((a, b) => a.pct - b.pct || a.correct - b.correct);
-  const wallOfShame = shameEntries.slice(0, 3);
+  const lostShakers = allEntries
+    .slice()
+    .sort((a, b) => a.pct - b.pct || a.correct - b.correct)
+    .slice(0, 3);
+
+  // ----- The Jolly Mon Gallery: per-player showcase of every album where
+  // that player hit 100% accuracy. Players with no 100% album show a cheeky
+  // “I’m just too original” placeholder. Iterate over every player so
+  // everyone has an entry, even brand-new voters.
+  type JollyMonEntry = { player: Player; perfectAlbums: Album[] };
+  const jollyMonGallery: JollyMonEntry[] = players.data.map(p => {
+    const perfectAlbums = (accuracyByPlayer.get(p.id) ?? [])
+      .filter(r => r.decided > 0 && r.correct === r.decided)
+      .map(r => r.album)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    return { player: p, perfectAlbums };
+  });
 
   // ----- Agreement matrix: for each pair of players, % of shared matches where they voted for the same song
   const agreementMatrix: { a: Player; b: Player; shared: number; agreed: number; pct: number }[] = [];
@@ -227,20 +242,67 @@ export default function Leaderboard() {
         </div>
       </section>
 
-      {/* Wall of Shame — the three lowest album-accuracy entries. */}
-      {wallOfShame.length > 0 && (
-        <section data-testid="section-wall-of-shame">
+      {/* The Jolly Mon Gallery — per-player showcase of perfect (100%)
+          album-accuracy showings. Everyone gets a card; if they haven't
+          gone perfect on any album yet they get the "too original" line. */}
+      <section data-testid="section-jolly-mon">
+        <h2 className="font-display text-xl font-bold mb-3 flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
+          <Sparkles className="h-5 w-5 text-primary" /> The Jolly Mon Gallery
+        </h2>
+        <p className="text-xs text-muted-foreground mb-3">Albums each player called perfectly — every pick matched the family winner.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {jollyMonGallery.map(({ player, perfectAlbums }) => (
+            <Card key={player.id} data-testid={`jolly-mon-${player.id}`}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <PlayerAvatar player={player} sizeClass="h-9 w-9" textSizeClass="text-sm" />
+                  <div className="font-display text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>{player.name}</div>
+                  {perfectAlbums.length > 0 && (
+                    <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground tabular-nums">
+                      {perfectAlbums.length} perfect
+                    </span>
+                  )}
+                </div>
+                {perfectAlbums.length === 0 ? (
+                  <div className="text-sm text-muted-foreground italic">“I’m just too original.”</div>
+                ) : (
+                  <div className="flex flex-wrap gap-3">
+                    {perfectAlbums.map(album => (
+                      <Link
+                        key={album.id}
+                        href={`/albums/${album.id}`}
+                        className="flex items-center gap-2 hover-elevate active-elevate rounded-md p-1 pr-2"
+                        data-testid={`jolly-mon-album-${player.id}-${album.id}`}
+                      >
+                        <AlbumCover album={album} sizeClass="h-12 w-12" roundedClass="rounded-md" />
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-mono text-muted-foreground leading-none">{album.year}</div>
+                          <div className="text-xs font-semibold leading-tight mt-0.5 line-clamp-2 max-w-[10rem]">{album.title}</div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* The Lost Shakers of Salt — the three lowest album-accuracy entries. */}
+      {lostShakers.length > 0 && (
+        <section data-testid="section-lost-shakers">
           <h2 className="font-display text-xl font-bold mb-3 flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
-            <ThumbsDown className="h-5 w-5 text-destructive" /> Wall of Shame
+            <ThumbsDown className="h-5 w-5 text-destructive" /> The Lost Shakers of Salt
           </h2>
           <p className="text-xs text-muted-foreground mb-3">The three lowest album-accuracy showings. No shade — just keeping score.</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {wallOfShame.map((entry, i) => (
+            {lostShakers.map((entry, i) => (
               <Link
                 key={`${entry.player.id}-${entry.album.id}`}
                 href={`/albums/${entry.album.id}`}
                 className="block"
-                data-testid={`shame-${i + 1}`}
+                data-testid={`lost-shaker-${i + 1}`}
               >
                 <Card className="hover-elevate active-elevate h-full border-destructive/30">
                   <CardContent className="p-4">

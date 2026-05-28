@@ -13,3 +13,8 @@ services:
       # Set these in a .env file alongside this compose file (see .env.example)
       - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
       - SESSION_SECRET=${SESSION_SECRET}
+      # Parrothead Madness community voting (magic-link sign-in via Resend).
+      # Leave RESEND_API_KEY blank to run in dev mode (links logged, not emailed).
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - MAIL_FROM=${MAIL_FROM}
+      - APP_BASE_URL=${APP_BASE_URL}

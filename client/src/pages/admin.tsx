@@ -11,6 +11,7 @@ import {
 import { Trash2, Plus, Save, Lock, Camera, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { AdminCommunity } from "@/components/admin-community";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -157,6 +158,9 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Parrothead Madness community administration */}
+      {albums.data && <AdminCommunity albums={albums.data} />}
     </div>
   );
 }

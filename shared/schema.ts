@@ -99,3 +99,80 @@ export const matchVotes = sqliteTable("match_votes", {
 export const insertMatchVoteSchema = createInsertSchema(matchVotes).omit({ id: true });
 export type InsertMatchVote = z.infer<typeof insertMatchVoteSchema>;
 export type MatchVote = typeof matchVotes.$inferSelect;
+
+// ========================================================================
+// COMMUNITY LAYER
+// ------------------------------------------------------------------------
+// The original tables above power the closed 5-person FAMILY bracket.
+// The tables below power the public "Parrothead Madness" community tally:
+// anyone with a magic link can log in and vote for themselves. Community
+// votes are kept entirely separate from the family bracket so the two
+// tallies can be shown side by side.
+// ========================================================================
+
+// ---------- Members ----------
+// A registered community voter. Identity = verified email address.
+// displayName is what shows on the leaderboard / vote tallies.
+export const members = sqliteTable("members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  createdAt: text("created_at").notNull(),
+  // Optional: lets an admin block a member without deleting their votes.
+  blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+});
+
+export const insertMemberSchema = createInsertSchema(members).omit({ id: true });
+export type InsertMember = z.infer<typeof insertMemberSchema>;
+export type Member = typeof members.$inferSelect;
+
+// ---------- Login Tokens (magic links) ----------
+// Short-lived single-use tokens emailed to a member. The token string is the
+// random secret embedded in the magic link; we look it up on verify.
+export const loginTokens = sqliteTable("login_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  expiresAt: integer("expires_at").notNull(), // epoch ms
+  usedAt: integer("used_at"), // epoch ms, null until consumed
+});
+
+export type LoginToken = typeof loginTokens.$inferSelect;
+
+// ---------- Community Round State ----------
+// Single-row table describing which bracket match is currently OPEN for
+// community voting, and whether voting is open. The admin advances this
+// manually (open a round -> members vote -> admin closes & locks winner).
+// We point at a specific (albumId, round) so the "current round" maps onto
+// the family bracket's match rows for that album+round.
+export const communityRound = sqliteTable("community_round", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  albumId: integer("album_id"),
+  round: integer("round"),
+  isOpen: integer("is_open", { mode: "boolean" }).notNull().default(false),
+});
+
+// ---------- Community Match Votes ----------
+// One row per (match, member). Records which song a logged-in community
+// member voted for in a head-to-head matchup. Winner is the plurality of
+// whatever votes were cast (NO requirement that everyone votes).
+export const communityVotes = sqliteTable("community_votes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  matchId: integer("match_id").notNull(),
+  memberId: integer("member_id").notNull(),
+  songVotedFor: text("song_voted_for").notNull(),
+});
+
+export type CommunityVote = typeof communityVotes.$inferSelect;
+
+// ---------- Community Album Favorites ----------
+// One row per (album, member): that member's single favorite song from the
+// album. Independent of the bracket voting above.
+export const communityFavorites = sqliteTable("community_favorites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  albumId: integer("album_id").notNull(),
+  memberId: integer("member_id").notNull(),
+  songTitle: text("song_title").notNull(),
+});
+
+export type CommunityFavorite = typeof communityFavorites.$inferSelect;

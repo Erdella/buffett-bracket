@@ -35,6 +35,8 @@ app.use(
 declare module "express-session" {
   interface SessionData {
     isAdmin?: boolean;
+    // Set when a community member is logged in via magic link.
+    memberId?: number;
   }
 }
 

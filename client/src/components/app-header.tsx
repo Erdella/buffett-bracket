@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BuffettLogo } from "@/components/logo";
 import { useTheme } from "@/components/theme-provider";
 import { AdminAuthButton } from "@/components/admin-auth-button";
+import { MemberAuthButton } from "@/components/member-auth-button";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +30,8 @@ export function AppHeader() {
         <Link href="/" className="flex items-center gap-2.5 hover-elevate active-elevate rounded-md px-2 py-1 -mx-2" data-testid="link-home">
           <BuffettLogo className="h-7 w-7 sm:h-8 sm:w-8 shrink-0" />
           <div className="leading-tight">
-            <div className="font-display font-bold text-base sm:text-lg" style={{ fontFamily: "var(--font-display)" }}>The Buffett Bracket</div>
-            <div className="text-[10px] sm:text-xs text-muted-foreground -mt-0.5 hidden xs:block sm:block">A family song-by-song showdown</div>
+            <div className="font-display font-bold text-base sm:text-lg" style={{ fontFamily: "var(--font-display)" }}>Parrothead Madness</div>
+            <div className="text-[10px] sm:text-xs text-muted-foreground -mt-0.5 hidden xs:block sm:block">A Jimmy Buffett song-by-song showdown</div>
           </div>
         </Link>
 
@@ -50,7 +51,8 @@ export function AppHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          <MemberAuthButton />
           <AdminAuthButton />
           <Button
             variant="ghost"

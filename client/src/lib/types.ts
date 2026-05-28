@@ -52,3 +52,46 @@ export interface MatchVote {
   playerId: number;
   songVotedFor: string;
 }
+
+// ----- community -----
+export interface MemberInfo {
+  id: number;
+  displayName: string;
+  email: string;
+}
+
+export interface CommunityRoundState {
+  albumId: number | null;
+  round: number | null;
+  isOpen: boolean;
+}
+
+export interface CommunityTally {
+  matchId: number;
+  round: number;
+  matchIndex: number;
+  songA: string | null;
+  songB: string | null;
+  aVotes: number;
+  bVotes: number;
+  total: number;
+  leader: string | null;
+}
+
+export interface CommunityAlbumData {
+  round: CommunityRoundState;
+  tallies: CommunityTally[];
+  myVotes: Record<number, string>;
+}
+
+export interface CommunityFavoritesData {
+  total: number;
+  ranked: { songTitle: string; count: number }[];
+  myFavorite: string | null;
+}
+
+export interface AdminMember extends MemberInfo {
+  createdAt: string;
+  blocked: boolean;
+  voteCount: number;
+}

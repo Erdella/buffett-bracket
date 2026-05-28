@@ -13,6 +13,7 @@ import AlbumDetail from "@/pages/album-detail";
 import Results from "@/pages/results";
 import Leaderboard from "@/pages/leaderboard";
 import Admin from "@/pages/admin";
+import Verify from "@/pages/verify";
 
 function AppRouter() {
   return (
@@ -23,6 +24,8 @@ function AppRouter() {
       <Route path="/results" component={Results} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/admin" component={Admin} />
+      <Route path="/verify/:token" component={Verify} />
+      <Route path="/verify" component={Verify} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -42,7 +45,7 @@ function App() {
               </main>
               <footer className="border-t border-border/60 py-6 mt-10">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 text-xs text-muted-foreground text-center">
-                  Fins up. Made for the family.
+                  Fins up. 🌴 Parrothead Madness — a Jimmy Buffett song-by-song showdown.
                 </div>
               </footer>
             </div>

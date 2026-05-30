@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote } from "lucide-react";
+import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, FastForward } from "lucide-react";
 
 /**
  * Human label for a round given its position relative to the final round.
@@ -82,9 +82,40 @@ export function CommunityBracket({ album }: { album: Album }) {
 
   const bracket = myBracket.data.bracket;
   const { totalRounds } = bracket;
+  const byes = bracket.byes ?? [];
 
   return (
     <div className="space-y-6">
+      {byes.length > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5" data-testid="card-byes">
+          <CardContent className="py-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <FastForward className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <h3 className="font-display font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>
+                Round 1 byes — these songs skip straight to Round 2
+              </h3>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              This album doesn't have a power-of-two number of songs, so {byes.length}{" "}
+              {byes.length === 1 ? "song gets" : "songs get"} a free pass through the
+              preliminaries and {byes.length === 1 ? "enters" : "enter"} the next round automatically.
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {byes.map(song => (
+                <Badge
+                  key={song}
+                  variant="outline"
+                  className="text-[11px] gap-1 border-amber-500/40"
+                  data-testid={`badge-bye-${song}`}
+                >
+                  <FastForward className="h-3 w-3" /> {song}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {!member && (
         <Card className="bg-primary/5 border-primary/30">
           <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3">

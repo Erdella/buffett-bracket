@@ -113,6 +113,8 @@ export interface PersonalBracket {
   totalRounds: number;
   complete: boolean;
   champion: string | null;
+  // Songs that received a round-1 bye (auto-advance into round 2).
+  byes: string[];
 }
 
 export interface MyBracketData {
@@ -132,4 +134,6 @@ export interface CommunityStandings {
   ranked: StandingRow[];
   winner: string | null;
   voterCount: number;
+  // Songs that received a round-1 bye (auto-advance into round 2).
+  byes: string[];
 }

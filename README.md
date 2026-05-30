@@ -135,6 +135,7 @@ The two contests are completely separate, surfaced on their own tabs on every al
 
 - **Family bracket** — the original five-voter contest (Tom, Renae, Danielle, Jon, Eric). Majority wins each matchup and a round won't advance until everyone has voted. Read-only for everyone but the admin.
 - **Community brackets** — each signed-in member runs their *own* copy of the bracket. Everyone begins from the same round-1 matchups, but from round 2 on each person's own picks advance, so no two brackets need to match. Voting is always open with live totals.
+- **Byes** — a single-elimination bracket needs a power-of-two field, so when an album doesn't have a power-of-two number of songs, some songs get a round-1 **bye**: they skip the preliminaries and enter Round 2 automatically. Byes only ever live in round 1, which keeps the quarterfinals, semifinals, and championship clean two-song matchups. The community panel lists exactly which songs received a bye.
 
 Community results are scored by **weighted points** pooled across all members' picks: 1 pt per early-round pick, 2 pts in the semifinals, 4 pts in the championship. The song with the most points wins the album for the community (ties broken alphabetically). Nothing the community does ever writes onto the family bracket — the tallies stay fully independent.
 

@@ -15,7 +15,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import seedAlbums from "./seed-albums";
 import { sendMagicLink, mailConfigured } from "./email";
-import { buildRoundOne, derivePersonalBracket, computeStandings } from "./community-bracket";
+import { buildRoundOne, derivePersonalBracket, computeStandings, byeSongsOf } from "./community-bracket";
 
 // Public base URL used to build magic links. Falls back to the request origin.
 const APP_BASE_URL = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
@@ -884,7 +884,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const roundOne = buildRoundOne(familyMatches, tracks);
     const allPicks = await storage.listCommunityPicksForAlbum(albumId);
     const standings = computeStandings(roundOne.length, allPicks);
-    res.json(standings);
+    res.json({ ...standings, byes: byeSongsOf(roundOne) });
   });
 
   // ========================================================================

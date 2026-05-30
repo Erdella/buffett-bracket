@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { LogIn, LogOut, Mail, CheckCircle2, User, Pencil } from "lucide-react";
+import { useRef, useState } from "react";
+import { LogIn, LogOut, Mail, CheckCircle2, User, Pencil, Camera, Trash2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, assetUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -37,6 +37,8 @@ export function MemberAuthButton() {
   const [devLink, setDevLink] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -92,6 +94,41 @@ export function MemberAuthButton() {
     },
   });
 
+  // Photo upload uses multipart form-data, so we hit the endpoint directly
+  // (apiRequest only handles JSON bodies).
+  async function uploadPhoto(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("photo", file);
+      const res = await fetch(assetUrl("/api/member/photo")!, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.text()) || `${res.status}`);
+      qc.refetchQueries({ queryKey: ["/api/auth/me"] });
+      qc.invalidateQueries();
+      toast({ title: "Photo updated", description: "Your avatar shows everywhere you've voted." });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: (e?.message ?? "Try a smaller image.").replace(/^\d+:\s*/, ""), variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function clearPhoto() {
+    try {
+      await apiRequest("DELETE", "/api/member/photo");
+      qc.refetchQueries({ queryKey: ["/api/auth/me"] });
+      qc.invalidateQueries();
+      toast({ title: "Photo removed", description: "Back to your initial." });
+    } catch (e: any) {
+      toast({ title: "Could not remove photo", description: (e?.message ?? "").replace(/^\d+:\s*/, ""), variant: "destructive" });
+    }
+  }
+
   function resetDialog() {
     setSent(false);
     setDevLink(null);
@@ -111,9 +148,15 @@ export function MemberAuthButton() {
               className="h-9 gap-1.5 px-2.5"
               data-testid="button-member-menu"
             >
-              <span className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0">
-                <User className="h-3.5 w-3.5" />
-              </span>
+              {member.photoUrl ? (
+                <span className="h-6 w-6 rounded-full overflow-hidden bg-muted ring-1 ring-black/5 flex items-center justify-center shrink-0">
+                  <img src={assetUrl(member.photoUrl)} alt={member.displayName} className="h-full w-full object-cover" data-testid="img-member-avatar" />
+                </span>
+              ) : (
+                <span className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0">
+                  <User className="h-3.5 w-3.5" />
+                </span>
+              )}
               <span className="text-sm font-medium max-w-[8rem] truncate hidden sm:inline" data-testid="text-member-name">
                 {member.displayName}
               </span>
@@ -132,7 +175,7 @@ export function MemberAuthButton() {
               }}
               data-testid="button-edit-name"
             >
-              <Pencil className="h-4 w-4 mr-2" /> Edit name
+              <Pencil className="h-4 w-4 mr-2" /> Edit profile
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => logoutMutation.mutate()}
@@ -147,11 +190,66 @@ export function MemberAuthButton() {
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
-              <DialogTitle>Edit display name</DialogTitle>
+              <DialogTitle>Edit profile</DialogTitle>
               <DialogDescription>
-                This is the name shown on the OG Parrothead Madness standings. Changing it updates everywhere you've voted.
+                Your name and photo show on the OG Parrothead Madness standings. Changes update everywhere you've voted.
               </DialogDescription>
             </DialogHeader>
+
+            {/* Avatar with upload / remove controls */}
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0">
+                {member.photoUrl ? (
+                  <span className="h-16 w-16 rounded-full overflow-hidden bg-muted ring-1 ring-black/5 flex items-center justify-center">
+                    <img src={assetUrl(member.photoUrl)} alt={member.displayName} className="h-full w-full object-cover" data-testid="img-edit-avatar" />
+                  </span>
+                ) : (
+                  <span className="h-16 w-16 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
+                    {member.displayName.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  data-testid="input-member-photo"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadPhoto(f);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  data-testid="button-upload-photo"
+                  className="gap-1.5"
+                >
+                  <Camera className="h-4 w-4" />
+                  {uploading ? "Uploading…" : member.photoUrl ? "Change photo" : "Add photo"}
+                </Button>
+                {member.photoUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => clearPhoto()}
+                    disabled={uploading}
+                    data-testid="button-remove-photo"
+                    className="gap-1.5 text-destructive focus:text-destructive justify-start"
+                  >
+                    <Trash2 className="h-4 w-4" /> Remove
+                  </Button>
+                )}
+                <span className="text-[11px] text-muted-foreground">JPEG, PNG, WEBP or GIF · up to 6MB</span>
+              </div>
+            </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();

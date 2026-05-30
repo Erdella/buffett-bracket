@@ -69,6 +69,7 @@ export interface IStorage {
   getMember(id: number): Promise<Member | undefined>;
   listMembers(): Promise<Member[]>;
   upsertMember(email: string, displayName: string): Promise<Member>;
+  updateMember(id: number, patch: Partial<Pick<Member, "displayName" | "photoUrl">>): Promise<Member | undefined>;
   setMemberBlocked(id: number, blocked: boolean): Promise<void>;
   // login tokens
   createLoginToken(token: string, email: string, expiresAt: number): Promise<void>;
@@ -312,6 +313,9 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date().toISOString(),
       blocked: false,
     }).returning().get();
+  }
+  async updateMember(id: number, patch: Partial<Pick<Member, "displayName" | "photoUrl">>): Promise<Member | undefined> {
+    return db.update(members).set(patch).where(eq(members.id, id)).returning().get();
   }
   async setMemberBlocked(id: number, blocked: boolean): Promise<void> {
     db.update(members).set({ blocked }).where(eq(members.id, id)).run();

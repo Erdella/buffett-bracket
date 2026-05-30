@@ -125,6 +125,8 @@ export const members = sqliteTable("members", {
   createdAt: text("created_at").notNull(),
   // Optional: lets an admin block a member without deleting their votes.
   blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+  // Optional uploaded avatar. URL path served by the app (e.g. /uploads/m3-...png).
+  photoUrl: text("photo_url"),
 });
 
 export const insertMemberSchema = createInsertSchema(members).omit({ id: true });

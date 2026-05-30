@@ -61,6 +61,8 @@ export interface MemberInfo {
   id: number;
   displayName: string;
   email: string;
+  // Optional uploaded avatar served from /uploads/. Null when none set.
+  photoUrl?: string | null;
   // True when the member still has the auto-derived default name (the email
   // prefix) and has never chosen one — used to prompt first-time signers.
   needsName?: boolean;
@@ -192,7 +194,7 @@ export interface OGTopPair {
 }
 
 export interface OGLeaderboardData {
-  members: { id: number; displayName: string }[];
+  members: { id: number; displayName: string; photoUrl?: string | null }[];
   perMember: OGMemberStat[];
   albumWinners: OGAlbumWinner[];
   topPairs: OGTopPair[];

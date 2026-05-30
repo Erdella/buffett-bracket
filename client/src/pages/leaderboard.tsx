@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, assetUrl } from "@/lib/queryClient";
 import type {
   Album, AlbumResult, AlbumStatus, BracketMatch, MatchVote, Player,
   OGLeaderboardData, OGMemberStat, OGPairAgreement, OGTopPair,
@@ -86,7 +86,18 @@ const OG_COLORS = ["#01696F", "#C2410C", "#7C3AED", "#0F766E", "#B45309", "#1D4E
 function ogColor(id: number) {
   return OG_COLORS[id % OG_COLORS.length];
 }
-function MemberAvatar({ name, id, sizeClass = "h-9 w-9", textSizeClass = "text-sm" }: { name: string; id: number; sizeClass?: string; textSizeClass?: string }) {
+function MemberAvatar({ name, id, photoUrl, sizeClass = "h-9 w-9", textSizeClass = "text-sm" }: { name: string; id: number; photoUrl?: string | null; sizeClass?: string; textSizeClass?: string }) {
+  if (photoUrl) {
+    return (
+      <span
+        className={cn("rounded-full overflow-hidden flex items-center justify-center shrink-0 bg-muted ring-1 ring-black/5", sizeClass)}
+        title={name}
+        aria-label={name}
+      >
+        <img src={assetUrl(photoUrl)} alt={name} className="h-full w-full object-cover" loading="lazy" />
+      </span>
+    );
+  }
   return (
     <span
       className={cn("rounded-full overflow-hidden flex items-center justify-center shrink-0 font-semibold text-white", sizeClass)}
@@ -477,6 +488,7 @@ function OGView() {
   const memberById = new Map(members.map(m => [m.id, m]));
   const statById = new Map(perMember.map(s => [s.memberId, s]));
   const nameOf = (id: number) => memberById.get(id)?.displayName ?? "Unknown";
+  const photoOf = (id: number) => memberById.get(id)?.photoUrl ?? null;
 
   if (members.length === 0) {
     return (
@@ -539,7 +551,7 @@ function OGView() {
               {championRanked.map((s, i) => (
                 <div key={s.memberId} className="px-4 py-3 sm:py-4 flex items-center gap-3 sm:gap-4" data-testid={`og-champ-${s.memberId}`}>
                   <div className="font-display text-2xl font-bold w-7 text-center text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>{i + 1}</div>
-                  <MemberAvatar id={s.memberId} name={nameOf(s.memberId)} sizeClass="h-10 w-10" textSizeClass="text-base" />
+                  <MemberAvatar id={s.memberId} name={nameOf(s.memberId)} photoUrl={photoOf(s.memberId)} sizeClass="h-10 w-10" textSizeClass="text-base" />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{nameOf(s.memberId)}</div>
                     <div className="text-xs text-muted-foreground">{s.championsCorrect}/{s.albumsCompleted} albums called</div>
@@ -566,7 +578,7 @@ function OGView() {
               {consensusRanked.map((s, i) => (
                 <div key={s.memberId} className="px-4 py-3 sm:py-4 flex items-center gap-3 sm:gap-4" data-testid={`og-consensus-${s.memberId}`}>
                   <div className="font-display text-2xl font-bold w-7 text-center text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>{i + 1}</div>
-                  <MemberAvatar id={s.memberId} name={nameOf(s.memberId)} sizeClass="h-10 w-10" textSizeClass="text-base" />
+                  <MemberAvatar id={s.memberId} name={nameOf(s.memberId)} photoUrl={photoOf(s.memberId)} sizeClass="h-10 w-10" textSizeClass="text-base" />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{nameOf(s.memberId)}</div>
                     <div className="text-xs text-muted-foreground">{s.albumsPlayed} {s.albumsPlayed === 1 ? "album" : "albums"} played</div>
@@ -593,7 +605,7 @@ function OGView() {
               {r1Ranked.map((s, i) => (
                 <div key={s.memberId} className="px-4 py-3 flex items-center gap-3 sm:gap-4" data-testid={`og-r1-${s.memberId}`}>
                   <div className="font-display text-xl font-bold w-7 text-center text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>{i + 1}</div>
-                  <MemberAvatar id={s.memberId} name={nameOf(s.memberId)} sizeClass="h-9 w-9" />
+                  <MemberAvatar id={s.memberId} name={nameOf(s.memberId)} photoUrl={photoOf(s.memberId)} sizeClass="h-9 w-9" />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{nameOf(s.memberId)}</div>
                     <div className="text-xs text-muted-foreground">{s.r1Agree}/{s.r1Total} with the crowd</div>
@@ -627,7 +639,7 @@ function OGView() {
           <Card data-testid="card-og-accuracy">
             <CardContent className="p-4 sm:p-5">
               <div className="flex items-center gap-3 mb-3">
-                <MemberAvatar id={selectedAccuracy.memberId} name={nameOf(selectedAccuracy.memberId)} sizeClass="h-9 w-9" />
+                <MemberAvatar id={selectedAccuracy.memberId} name={nameOf(selectedAccuracy.memberId)} photoUrl={photoOf(selectedAccuracy.memberId)} sizeClass="h-9 w-9" />
                 <div className="font-display text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>{nameOf(selectedAccuracy.memberId)}</div>
                 <div className="ml-auto text-right">
                   <div className="font-display text-base font-bold tabular-nums" style={{ fontFamily: "var(--font-display)" }}>{pctStr(selectedAccuracy.consensusScore)}</div>
@@ -671,7 +683,7 @@ function OGView() {
               <Card key={s.memberId} data-testid={`og-jolly-mon-${i + 1}`}>
                 <CardContent className="p-4 text-center">
                   <div className="font-display text-xl font-bold text-primary mb-2" style={{ fontFamily: "var(--font-display)" }}>#{i + 1}</div>
-                  <div className="flex justify-center mb-2"><MemberAvatar id={s.memberId} name={nameOf(s.memberId)} sizeClass="h-12 w-12" textSizeClass="text-lg" /></div>
+                  <div className="flex justify-center mb-2"><MemberAvatar id={s.memberId} name={nameOf(s.memberId)} photoUrl={photoOf(s.memberId)} sizeClass="h-12 w-12" textSizeClass="text-lg" /></div>
                   <div className="font-semibold text-sm truncate">{nameOf(s.memberId)}</div>
                   <div className="font-display text-lg font-bold tabular-nums mt-1" style={{ fontFamily: "var(--font-display)" }}>{pctStr(s.consensusScore)}</div>
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">consensus</div>
@@ -691,7 +703,7 @@ function OGView() {
               <Card key={s.memberId} className="border-destructive/30" data-testid={`og-lost-shaker-${i + 1}`}>
                 <CardContent className="p-4 text-center">
                   <div className="font-display text-xl font-bold text-destructive mb-2" style={{ fontFamily: "var(--font-display)" }}>#{i + 1}</div>
-                  <div className="flex justify-center mb-2"><MemberAvatar id={s.memberId} name={nameOf(s.memberId)} sizeClass="h-12 w-12" textSizeClass="text-lg" /></div>
+                  <div className="flex justify-center mb-2"><MemberAvatar id={s.memberId} name={nameOf(s.memberId)} photoUrl={photoOf(s.memberId)} sizeClass="h-12 w-12" textSizeClass="text-lg" /></div>
                   <div className="font-semibold text-sm truncate">{nameOf(s.memberId)}</div>
                   <div className="font-display text-lg font-bold tabular-nums mt-1 text-destructive" style={{ fontFamily: "var(--font-display)" }}>{pctStr(s.consensusScore)}</div>
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">consensus</div>
@@ -763,10 +775,10 @@ function OGView() {
                 ) : pairAgreement.data ? (
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <MemberAvatar id={Number(pairA)} name={nameOf(Number(pairA))} sizeClass="h-8 w-8" />
+                      <MemberAvatar id={Number(pairA)} name={nameOf(Number(pairA))} photoUrl={photoOf(Number(pairA))} sizeClass="h-8 w-8" />
                       <span className="text-sm font-medium truncate">{nameOf(Number(pairA))}</span>
                       <span className="text-xs text-muted-foreground">+</span>
-                      <MemberAvatar id={Number(pairB)} name={nameOf(Number(pairB))} sizeClass="h-8 w-8" />
+                      <MemberAvatar id={Number(pairB)} name={nameOf(Number(pairB))} photoUrl={photoOf(Number(pairB))} sizeClass="h-8 w-8" />
                       <span className="text-sm font-medium truncate">{nameOf(Number(pairB))}</span>
                     </div>
                     <div className="text-right shrink-0">
@@ -832,8 +844,9 @@ function OGView() {
 // Top 10 round-1 agreement pairs across all OG members. Round 1 / prelims is the
 // ONLY round every member shares identical matchups, so these are exact pairwise
 // agreement figures computed server-side (not a heuristic).
-function TopAgreementPairs({ members, topPairs }: { members: { id: number; displayName: string }[]; topPairs: OGTopPair[] }) {
+function TopAgreementPairs({ members, topPairs }: { members: { id: number; displayName: string; photoUrl?: string | null }[]; topPairs: OGTopPair[] }) {
   const nameOf = (id: number) => members.find(m => m.id === id)?.displayName ?? "Unknown";
+  const photoOf = (id: number) => members.find(m => m.id === id)?.photoUrl ?? null;
 
   if (topPairs.length === 0) {
     return <div className="text-sm text-muted-foreground italic">Not enough round-1 picks yet to rank pairs.</div>;
@@ -846,10 +859,10 @@ function TopAgreementPairs({ members, topPairs }: { members: { id: number; displ
           <div key={`${p.memberA}-${p.memberB}`} className="px-4 py-3 flex items-center gap-3" data-testid={`og-agreement-pair-${i + 1}`}>
             <div className="font-display text-lg font-bold w-6 text-center text-muted-foreground shrink-0" style={{ fontFamily: "var(--font-display)" }}>{i + 1}</div>
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <MemberAvatar id={p.memberA} name={nameOf(p.memberA)} sizeClass="h-7 w-7" textSizeClass="text-xs" />
+              <MemberAvatar id={p.memberA} name={nameOf(p.memberA)} photoUrl={photoOf(p.memberA)} sizeClass="h-7 w-7" textSizeClass="text-xs" />
               <span className="text-sm font-medium truncate">{nameOf(p.memberA)}</span>
               <span className="text-xs text-muted-foreground">+</span>
-              <MemberAvatar id={p.memberB} name={nameOf(p.memberB)} sizeClass="h-7 w-7" textSizeClass="text-xs" />
+              <MemberAvatar id={p.memberB} name={nameOf(p.memberB)} photoUrl={photoOf(p.memberB)} sizeClass="h-7 w-7" textSizeClass="text-xs" />
               <span className="text-sm font-medium truncate">{nameOf(p.memberB)}</span>
             </div>
             <div className="text-right shrink-0">

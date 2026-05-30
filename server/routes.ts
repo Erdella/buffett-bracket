@@ -57,6 +57,25 @@ function imageUploader(prefix: string) {
 const photoUpload = imageUploader("p");
 const coverUpload = imageUploader("album-");
 
+// Member avatars are self-scoped: the filename uses the logged-in member's id
+// (from the session) rather than a URL :id param.
+const memberPhotoUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (req, file, cb) => {
+      const ext = (path.extname(file.originalname) || ".jpg").toLowerCase().slice(0, 5);
+      const safeExt = /^\.(jpg|jpeg|png|webp|gif)$/.test(ext) ? ext : ".jpg";
+      const memberId = (req as Request).session?.memberId ?? "x";
+      cb(null, `m${memberId}-${Date.now()}${safeExt}`);
+    },
+  }),
+  limits: { fileSize: 6 * 1024 * 1024 }, // 6 MB ceiling
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPEG, PNG, WEBP, or GIF images are allowed."));
+  },
+});
+
 // --- Admin auth ---
 // Single-admin model: one bcrypt hash in env. The hash MUST be set; if it's
 // missing the server logs a warning and refuses all logins.
@@ -76,6 +95,7 @@ const MEMBER_MUTATION_PATHS = [
   "/api/community/pick",
   "/api/member/logout",
   "/api/member/profile",
+  "/api/member/photo",
 ];
 // Public (no-auth) mutation endpoints: the magic-link flow itself.
 const PUBLIC_MUTATION_PATHS = [
@@ -180,8 +200,18 @@ async function ensureSchemaAndSeed() {
     email TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    blocked INTEGER NOT NULL DEFAULT 0
+    blocked INTEGER NOT NULL DEFAULT 0,
+    photo_url TEXT
   )`);
+  // Add photo_url column to existing members tables (idempotent).
+  try {
+    const memberCols = db.all(sql`PRAGMA table_info(members)`) as Array<{ name: string }>;
+    if (!memberCols.some(c => c.name === "photo_url")) {
+      db.run(sql`ALTER TABLE members ADD COLUMN photo_url TEXT`);
+    }
+  } catch (e) {
+    console.warn("Could not check/add members.photo_url column:", e);
+  }
   db.run(sql`CREATE TABLE IF NOT EXISTS login_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token TEXT NOT NULL UNIQUE,
@@ -283,11 +313,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Returns whether the current session is admin. Public; used by the client
   // to decide whether to render edit affordances.
   app.get("/api/auth/me", async (req, res) => {
-    let member: { id: number; displayName: string; email: string; needsName: boolean } | null = null;
+    let member: { id: number; displayName: string; email: string; photoUrl: string | null; needsName: boolean } | null = null;
     if (req.session.memberId) {
       const m = await storage.getMember(req.session.memberId);
       if (m && !m.blocked) {
-        member = { id: m.id, displayName: m.displayName, email: m.email, needsName: nameIsPlaceholder(m.email, m.displayName) };
+        member = { id: m.id, displayName: m.displayName, email: m.email, photoUrl: m.photoUrl ?? null, needsName: nameIsPlaceholder(m.email, m.displayName) };
       } else {
         // Member was deleted or blocked since login — clear stale session.
         req.session.memberId = undefined;
@@ -641,7 +671,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       req.session.memberId = member.id;
       req.session.save(err => {
         if (err) return res.status(500).json({ error: "Could not start your session." });
-        res.json({ member: { id: member.id, displayName: member.displayName, email: member.email, needsName: nameIsPlaceholder(member.email, member.displayName) } });
+        res.json({ member: { id: member.id, displayName: member.displayName, email: member.email, photoUrl: member.photoUrl ?? null, needsName: nameIsPlaceholder(member.email, member.displayName) } });
       });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -661,7 +691,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const m = await storage.getMember(req.session.memberId);
     if (!m) return res.status(404).json({ error: "Member not found" });
     const updated = await storage.upsertMember(m.email, displayName);
-    res.json({ member: { id: updated.id, displayName: updated.displayName, email: updated.email, needsName: nameIsPlaceholder(updated.email, updated.displayName) } });
+    res.json({ member: { id: updated.id, displayName: updated.displayName, email: updated.email, photoUrl: updated.photoUrl ?? null, needsName: nameIsPlaceholder(updated.email, updated.displayName) } });
+  });
+
+  // Upload (or replace) the logged-in member's own profile photo. Self-scoped
+  // via the session — a member can only change their own avatar.
+  app.post("/api/member/photo", memberPhotoUpload.single("photo"), async (req, res) => {
+    try {
+      if (!req.session.memberId) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        return res.status(401).json({ error: "Sign-in required" });
+      }
+      const m = await storage.getMember(req.session.memberId);
+      if (!m) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: "Member not found" });
+      }
+      if (!req.file) return res.status(400).json({ error: "No image uploaded." });
+      // Best-effort delete of the previous photo file.
+      if (m.photoUrl?.startsWith("/uploads/")) {
+        const oldPath = path.join(UPLOAD_DIR, path.basename(m.photoUrl));
+        fs.unlink(oldPath, () => {});
+      }
+      const photoUrl = `/uploads/${req.file.filename}`;
+      const updated = await storage.updateMember(m.id, { photoUrl });
+      res.json({ member: { id: updated!.id, displayName: updated!.displayName, email: updated!.email, photoUrl: updated!.photoUrl ?? null, needsName: nameIsPlaceholder(updated!.email, updated!.displayName) } });
+    } catch (e: any) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      res.status(400).json({ error: e?.message ?? "Upload failed." });
+    }
+  });
+
+  // Remove the logged-in member's own profile photo.
+  app.delete("/api/member/photo", async (req, res) => {
+    if (!req.session.memberId) return res.status(401).json({ error: "Sign-in required" });
+    const m = await storage.getMember(req.session.memberId);
+    if (!m) return res.status(404).json({ error: "Member not found" });
+    if (m.photoUrl?.startsWith("/uploads/")) {
+      const oldPath = path.join(UPLOAD_DIR, path.basename(m.photoUrl));
+      fs.unlink(oldPath, () => {});
+    }
+    const updated = await storage.updateMember(m.id, { photoUrl: null });
+    res.json({ member: { id: updated!.id, displayName: updated!.displayName, email: updated!.email, photoUrl: updated!.photoUrl ?? null, needsName: nameIsPlaceholder(updated!.email, updated!.displayName) } });
   });
 
   // ========================================================================
@@ -1029,7 +1100,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }));
 
     res.json({
-      members: members.map(m => ({ id: m.id, displayName: m.displayName })),
+      members: members.map(m => ({ id: m.id, displayName: m.displayName, photoUrl: m.photoUrl ?? null })),
       perMember,
       albumWinners,
       topPairs,

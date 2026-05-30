@@ -3,15 +3,18 @@ import { useLocation, useRoute } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 
-type State = "verifying" | "success" | "error";
+type State = "verifying" | "name" | "success" | "error";
 
 /**
- * Magic-link landing page. The link points at /#/verify?token=...
- * We read the token from the hash query string, POST it to /api/member/verify,
- * then bounce to Now Playing on success.
+ * Magic-link landing page. The link points at /#/verify/<token>
+ * We read the token from the hash path, POST it to /api/member/verify, then:
+ *  - if this is a first-time signer who never chose a display name, ask for one,
+ *  - otherwise bounce to Now Playing.
  */
 export default function Verify() {
   const [, navigate] = useLocation();
@@ -20,7 +23,20 @@ export default function Verify() {
   const [state, setState] = useState<State>("verifying");
   const [message, setMessage] = useState("");
   const [name, setName] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const ran = useRef(false);
+
+  // Force the header (and anything else reading auth) to refetch immediately so
+  // the signed-in state shows without a manual page refresh.
+  async function refreshAuth() {
+    await qc.refetchQueries({ queryKey: ["/api/auth/me"] });
+  }
+
+  function finishToHome() {
+    setState("success");
+    // Brief pause so the user sees the success state, then go vote.
+    setTimeout(() => navigate("/"), 1000);
+  }
 
   useEffect(() => {
     if (ran.current) return;
@@ -47,16 +63,37 @@ export default function Verify() {
         const res = await apiRequest("POST", "/api/member/verify", { token });
         const data = await res.json();
         setName(data.member?.displayName ?? "");
-        setState("success");
-        await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
-        // Brief pause so the user sees the success state, then go vote.
-        setTimeout(() => navigate("/"), 1200);
+        // Make sure the header reflects the new session right away.
+        await refreshAuth();
+        // First-time signer who never picked a name → prompt for one.
+        if (data.member?.needsName) {
+          setName(""); // start with an empty field rather than the email prefix
+          setState("name");
+        } else {
+          finishToHome();
+        }
       } catch (err: any) {
         setState("error");
         setMessage((err?.message ?? "").replace(/^\d+:\s*/, "") || "We couldn't verify this link.");
       }
     })();
   }, [navigate, qc, params]);
+
+  async function saveName() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSavingName(true);
+    try {
+      await apiRequest("POST", "/api/member/profile", { displayName: trimmed });
+      await refreshAuth();
+      finishToHome();
+    } catch {
+      // If saving fails, don't trap the user — let them in anyway.
+      finishToHome();
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   return (
     <div className="max-w-md mx-auto pt-10">
@@ -71,6 +108,56 @@ export default function Verify() {
               </div>
               <p className="text-sm text-muted-foreground">Hang tight, hauling in your sail.</p>
             </>
+          )}
+          {state === "name" && (
+            <form
+              className="space-y-4 text-left"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveName();
+              }}
+            >
+              <div className="text-center space-y-1">
+                <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
+                <div className="font-display text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                  You're in!
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  What should we call you? This is the name shown on the community standings.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="verify-name">Display name</Label>
+                <Input
+                  id="verify-name"
+                  data-testid="input-verify-name"
+                  placeholder="e.g. Captain Jon"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={savingName}
+                  maxLength={60}
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => finishToHome()}
+                  disabled={savingName}
+                  data-testid="button-skip-name"
+                >
+                  Skip
+                </Button>
+                <Button
+                  type="submit"
+                  data-testid="button-save-name"
+                  disabled={savingName || !name.trim()}
+                >
+                  {savingName ? "Saving…" : "Save name"}
+                </Button>
+              </div>
+            </form>
           )}
           {state === "success" && (
             <>

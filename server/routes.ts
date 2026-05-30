@@ -21,6 +21,14 @@ import { buildRoundOne, derivePersonalBracket, computeStandings } from "./commun
 const APP_BASE_URL = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
 const TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
+// A member who has never set a real name keeps the auto-derived default
+// (the part of their email before the "@"). We use that to know when to prompt
+// a first-time signer to choose a display name. Mirrors storage.upsertMember's
+// fallback: displayName || email.split("@")[0].
+function nameIsPlaceholder(email: string, displayName: string): boolean {
+  return displayName.trim() === email.split("@")[0];
+}
+
 // Uploaded player avatars live next to data.db (cwd) so they share the
 // Docker volume mount and survive image upgrades.
 const UPLOAD_DIR = path.resolve("uploads");
@@ -64,6 +72,7 @@ const MEMBER_MUTATION_PATHS = [
   "/api/community/favorite",
   "/api/community/pick",
   "/api/member/logout",
+  "/api/member/profile",
 ];
 // Public (no-auth) mutation endpoints: the magic-link flow itself.
 const PUBLIC_MUTATION_PATHS = [
@@ -247,11 +256,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Returns whether the current session is admin. Public; used by the client
   // to decide whether to render edit affordances.
   app.get("/api/auth/me", async (req, res) => {
-    let member: { id: number; displayName: string; email: string } | null = null;
+    let member: { id: number; displayName: string; email: string; needsName: boolean } | null = null;
     if (req.session.memberId) {
       const m = await storage.getMember(req.session.memberId);
       if (m && !m.blocked) {
-        member = { id: m.id, displayName: m.displayName, email: m.email };
+        member = { id: m.id, displayName: m.displayName, email: m.email, needsName: nameIsPlaceholder(m.email, m.displayName) };
       } else {
         // Member was deleted or blocked since login — clear stale session.
         req.session.memberId = undefined;
@@ -605,7 +614,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       req.session.memberId = member.id;
       req.session.save(err => {
         if (err) return res.status(500).json({ error: "Could not start your session." });
-        res.json({ member: { id: member.id, displayName: member.displayName, email: member.email } });
+        res.json({ member: { id: member.id, displayName: member.displayName, email: member.email, needsName: nameIsPlaceholder(member.email, member.displayName) } });
       });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -625,7 +634,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const m = await storage.getMember(req.session.memberId);
     if (!m) return res.status(404).json({ error: "Member not found" });
     const updated = await storage.upsertMember(m.email, displayName);
-    res.json({ member: { id: updated.id, displayName: updated.displayName, email: updated.email } });
+    res.json({ member: { id: updated.id, displayName: updated.displayName, email: updated.email, needsName: nameIsPlaceholder(updated.email, updated.displayName) } });
   });
 
   // ========================================================================

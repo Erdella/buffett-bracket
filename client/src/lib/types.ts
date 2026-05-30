@@ -58,6 +58,9 @@ export interface MemberInfo {
   id: number;
   displayName: string;
   email: string;
+  // True when the member still has the auto-derived default name (the email
+  // prefix) and has never chosen one — used to prompt first-time signers.
+  needsName?: boolean;
 }
 
 export interface CommunityRoundState {

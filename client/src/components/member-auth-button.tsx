@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogIn, LogOut, Mail, CheckCircle2, User } from "lucide-react";
+import { LogIn, LogOut, Mail, CheckCircle2, User, Pencil } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,9 +33,10 @@ export function MemberAuthButton() {
   const { member, isLoading } = useAuth();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [sent, setSent] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -43,7 +44,6 @@ export function MemberAuthButton() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/member/request-link", {
         email: email.trim(),
-        displayName: name.trim() || undefined,
       });
       return res.json() as Promise<{ ok: boolean; devLink?: string }>;
     },
@@ -65,9 +65,30 @@ export function MemberAuthButton() {
       await apiRequest("POST", "/api/member/logout");
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Force an immediate refetch so the header updates without a page refresh.
+      qc.refetchQueries({ queryKey: ["/api/auth/me"] });
       qc.invalidateQueries();
       toast({ title: "Signed out", description: "See you next round. Fins up." });
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/member/profile", { displayName: editName.trim() });
+    },
+    onSuccess: () => {
+      // Refetch auth (header name) and standings/anything showing names.
+      qc.refetchQueries({ queryKey: ["/api/auth/me"] });
+      qc.invalidateQueries();
+      setEditOpen(false);
+      toast({ title: "Name updated", description: "Your new name shows everywhere you've voted." });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Couldn't update name",
+        description: err.message.replace(/^\d+:\s*/, ""),
+        variant: "destructive",
+      });
     },
   });
 
@@ -75,44 +96,104 @@ export function MemberAuthButton() {
     setSent(false);
     setDevLink(null);
     setEmail("");
-    setName("");
   }
 
   if (isLoading) return null;
 
   if (member) {
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 gap-1.5 px-2.5"
-            data-testid="button-member-menu"
-          >
-            <span className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0">
-              <User className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-sm font-medium max-w-[8rem] truncate hidden sm:inline" data-testid="text-member-name">
-              {member.displayName}
-            </span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span className="truncate">{member.displayName}</span>
-            <span className="text-xs font-normal text-muted-foreground truncate">{member.email}</span>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => logoutMutation.mutate()}
-            data-testid="button-member-logout"
-            className="text-destructive focus:text-destructive"
-          >
-            <LogOut className="h-4 w-4 mr-2" /> Sign out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-1.5 px-2.5"
+              data-testid="button-member-menu"
+            >
+              <span className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0">
+                <User className="h-3.5 w-3.5" />
+              </span>
+              <span className="text-sm font-medium max-w-[8rem] truncate hidden sm:inline" data-testid="text-member-name">
+                {member.displayName}
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="flex flex-col gap-0.5">
+              <span className="truncate">{member.displayName}</span>
+              <span className="text-xs font-normal text-muted-foreground truncate">{member.email}</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                setEditName(member.displayName);
+                setEditOpen(true);
+              }}
+              data-testid="button-edit-name"
+            >
+              <Pencil className="h-4 w-4 mr-2" /> Edit name
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => logoutMutation.mutate()}
+              data-testid="button-member-logout"
+              className="text-destructive focus:text-destructive"
+            >
+              <LogOut className="h-4 w-4 mr-2" /> Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit display name</DialogTitle>
+              <DialogDescription>
+                This is the name shown on the community standings. Changing it updates everywhere you've voted.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!editName.trim()) return;
+                renameMutation.mutate();
+              }}
+              className="space-y-3"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-member-name">Display name</Label>
+                <Input
+                  id="edit-member-name"
+                  data-testid="input-edit-name"
+                  placeholder="What should we call you?"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  disabled={renameMutation.isPending}
+                  maxLength={60}
+                  autoFocus
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setEditOpen(false)}
+                  disabled={renameMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  data-testid="button-save-edit-name"
+                  disabled={renameMutation.isPending || !editName.trim()}
+                >
+                  {renameMutation.isPending ? "Saving…" : "Save"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
@@ -154,18 +235,6 @@ export function MemberAuthButton() {
                 }}
                 className="space-y-3"
               >
-                <div className="space-y-1.5">
-                  <Label htmlFor="member-name">Display name</Label>
-                  <Input
-                    id="member-name"
-                    data-testid="input-member-name"
-                    placeholder="What should we call you?"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={requestMutation.isPending}
-                    maxLength={60}
-                  />
-                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="member-email">Email</Label>
                   <Input

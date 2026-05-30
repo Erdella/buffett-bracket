@@ -21,7 +21,9 @@ export interface AuthState {
 export function useAuth(): AuthState & { isLoading: boolean } {
   const q = useQuery<AuthState>({
     queryKey: ["/api/auth/me"],
-    staleTime: 30_000,
+    // Keep auth state fresh so the header reflects sign-in/out without a manual
+    // page refresh. A short stale window lets invalidation refetch promptly.
+    staleTime: 5_000,
   });
   return {
     isAdmin: q.data?.isAdmin ?? false,

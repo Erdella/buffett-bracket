@@ -15,7 +15,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import seedAlbums from "./seed-albums";
 import { sendMagicLink, mailConfigured } from "./email";
-import { buildRoundOne, derivePersonalBracket, computeStandings, byeSongsOf } from "./community-bracket";
+import { buildRoundOne, derivePersonalBracket, computeStandings, resolveSeedOrder } from "./community-bracket";
 
 // Public base URL used to build magic links. Falls back to the request origin.
 const APP_BASE_URL = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
@@ -104,16 +104,20 @@ async function ensureSchemaAndSeed() {
     year INTEGER NOT NULL,
     order_index INTEGER NOT NULL,
     tracks TEXT NOT NULL,
-    cover_url TEXT
+    cover_url TEXT,
+    seed_order TEXT
   )`);
-  // Add cover_url column to existing album tables (idempotent).
+  // Add cover_url / seed_order columns to existing album tables (idempotent).
   try {
     const cols = db.all(sql`PRAGMA table_info(albums)`) as Array<{ name: string }>;
     if (!cols.some(c => c.name === "cover_url")) {
       db.run(sql`ALTER TABLE albums ADD COLUMN cover_url TEXT`);
     }
+    if (!cols.some(c => c.name === "seed_order")) {
+      db.run(sql`ALTER TABLE albums ADD COLUMN seed_order TEXT`);
+    }
   } catch (e) {
-    console.warn("Could not check/add cover_url column:", e);
+    console.warn("Could not check/add album columns:", e);
   }
   db.run(sql`CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,6 +228,26 @@ async function ensureSchemaAndSeed() {
         tracks: JSON.stringify(a.tracks),
       });
     }
+  }
+
+  // Data fix (idempotent): the original "Down to Earth" seed shipped the 11-track
+  // 1970 original, but the album's canonical (1981/1998 re-release) order has 12
+  // tracks, adding "Richard Frost" at position 3. Insert it if it's missing so
+  // the community seeded bracket produces the expected 4 prelims + 4 quarters.
+  try {
+    const dte = (await storage.listAlbums()).find(a => a.title === "Down to Earth");
+    if (dte) {
+      const tracks = JSON.parse(dte.tracks) as string[];
+      if (!tracks.includes("Richard Frost")) {
+        const insertAt = tracks.indexOf("The Missionary");
+        if (insertAt > 0) {
+          tracks.splice(insertAt, 0, "Richard Frost");
+          await storage.updateAlbum(dte.id, { tracks: JSON.stringify(tracks) });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not apply Down to Earth tracklist fix:", e);
   }
 
   // Seed players if empty
@@ -802,17 +826,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const album = await storage.getAlbum(albumId);
     if (!album) return res.status(404).json({ error: "Album not found" });
     const tracks = JSON.parse(album.tracks) as string[];
-    const familyMatches = await storage.listBracketMatches(albumId);
-    const roundOne = buildRoundOne(familyMatches, tracks);
+    const seeded = buildRoundOne(album.seedOrder, tracks);
 
-    if (roundOne.length === 0) {
+    if (seeded.roundOne.length === 0) {
       return res.json({ available: false, bracket: null });
     }
 
     const picks = req.session.memberId
       ? await storage.listCommunityPicksForMember(albumId, req.session.memberId)
       : [];
-    const bracket = derivePersonalBracket(roundOne, picks);
+    const bracket = derivePersonalBracket(seeded, picks);
     res.json({ available: true, bracket });
   });
 
@@ -833,16 +856,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const album = await storage.getAlbum(albumId);
       if (!album) return res.status(404).json({ error: "Album not found" });
       const tracks = JSON.parse(album.tracks) as string[];
-      const familyMatches = await storage.listBracketMatches(albumId);
-      const roundOne = buildRoundOne(familyMatches, tracks);
-      if (roundOne.length === 0) {
+      const seeded = buildRoundOne(album.seedOrder, tracks);
+      if (seeded.roundOne.length === 0) {
         return res.status(400).json({ error: "No bracket exists for this album yet." });
       }
 
       // Re-derive the member's current bracket and validate the pick is for a
       // matchup that actually exists for them, with one of its two songs.
       const existingPicks = await storage.listCommunityPicksForMember(albumId, memberId);
-      const bracket = derivePersonalBracket(roundOne, existingPicks);
+      const bracket = derivePersonalBracket(seeded, existingPicks);
       const roundMatches = bracket.rounds[round - 1];
       if (!roundMatches) {
         return res.status(400).json({ error: "That round isn't open on your bracket yet." });
@@ -866,7 +888,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Return the freshly re-derived bracket so the client updates in one round-trip.
       const updatedPicks = await storage.listCommunityPicksForMember(albumId, memberId);
-      const updated = derivePersonalBracket(roundOne, updatedPicks);
+      const updated = derivePersonalBracket(seeded, updatedPicks);
       res.json({ saved, bracket: updated });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -880,11 +902,81 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const album = await storage.getAlbum(albumId);
     if (!album) return res.status(404).json({ error: "Album not found" });
     const tracks = JSON.parse(album.tracks) as string[];
-    const familyMatches = await storage.listBracketMatches(albumId);
-    const roundOne = buildRoundOne(familyMatches, tracks);
+    const seeded = buildRoundOne(album.seedOrder, tracks);
     const allPicks = await storage.listCommunityPicksForAlbum(albumId);
-    const standings = computeStandings(roundOne.length, allPicks);
-    res.json({ ...standings, byes: byeSongsOf(roundOne) });
+    const standings = computeStandings(seeded.totalRounds, allPicks);
+    res.json({ ...standings, hasPrelims: seeded.hasPrelims });
+  });
+
+  // ========================================================================
+  // ADMIN: per-album community bracket SEEDING
+  // The seed order is the source of truth for the seeded play-in bracket.
+  // ========================================================================
+
+  // Current seed order for an album, plus the structure it produces. Returns
+  // the resolved order (admin-set, or track-order default) so the UI never has
+  // to guess. `isCustom` is true when an explicit seed order has been saved.
+  app.get("/api/albums/:id/seeds", async (req, res) => {
+    const albumId = Number(req.params.id);
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+    const tracks = JSON.parse(album.tracks) as string[];
+    const seedOrder = resolveSeedOrder(album.seedOrder, tracks);
+    const seeded = buildRoundOne(album.seedOrder, tracks);
+    res.json({
+      seedOrder,
+      isCustom: !!album.seedOrder,
+      totalRounds: seeded.totalRounds,
+      hasPrelims: seeded.hasPrelims,
+      prelimGames: seeded.hasPrelims ? seeded.roundOne.length : 0,
+      roundOne: seeded.roundOne,
+    });
+  });
+
+  // Set (or reset) an album's seed order. Admin-only via the mutation gate.
+  // Body { seedOrder: string[] } sets a custom order; { seedOrder: null }
+  // clears it back to the track-order default. The submitted order must be a
+  // permutation of the album's tracklist.
+  app.put("/api/albums/:id/seeds", async (req, res) => {
+    try {
+      const albumId = Number(req.params.id);
+      const album = await storage.getAlbum(albumId);
+      if (!album) return res.status(404).json({ error: "Album not found" });
+      const tracks = JSON.parse(album.tracks) as string[];
+
+      const schema = z.object({
+        seedOrder: z.array(z.string().min(1)).nullable(),
+      });
+      const { seedOrder } = schema.parse(req.body);
+
+      if (seedOrder === null) {
+        const updated = await storage.updateAlbum(albumId, { seedOrder: null });
+        const tr = JSON.parse(updated!.tracks) as string[];
+        return res.json({ seedOrder: resolveSeedOrder(null, tr), isCustom: false });
+      }
+
+      // Validate the submitted order is a permutation of the tracklist.
+      const trackSet = new Set(tracks);
+      const seen = new Set<string>();
+      for (const t of seedOrder) {
+        if (!trackSet.has(t)) {
+          return res.status(400).json({ error: `"${t}" isn't a track on this album.` });
+        }
+        if (seen.has(t)) {
+          return res.status(400).json({ error: `"${t}" appears more than once in the seed order.` });
+        }
+        seen.add(t);
+      }
+      if (seen.size !== tracks.length) {
+        return res.status(400).json({ error: "Seed order must include every song on the album exactly once." });
+      }
+
+      const updated = await storage.updateAlbum(albumId, { seedOrder: JSON.stringify(seedOrder) });
+      const tr = JSON.parse(updated!.tracks) as string[];
+      res.json({ seedOrder: resolveSeedOrder(updated!.seedOrder, tr), isCustom: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
   });
 
   // ========================================================================

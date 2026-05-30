@@ -12,6 +12,11 @@ export const albums = sqliteTable("albums", {
   tracks: text("tracks").notNull(),
   // Optional uploaded album cover (URL path served by the app, e.g. /uploads/album-3-...jpg).
   coverUrl: text("cover_url"),
+  // Optional community bracket SEED ORDER: a JSON string array of song titles
+  // ranked seed 1 (best) -> seed N. When null/absent, track order is used as
+  // the default seeding. The seeded bracket builder uses this to decide which
+  // songs get direct entry and which play in the preliminary round.
+  seedOrder: text("seed_order"),
 });
 
 export const insertAlbumSchema = createInsertSchema(albums).omit({ id: true });

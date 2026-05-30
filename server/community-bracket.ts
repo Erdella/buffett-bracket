@@ -1,22 +1,42 @@
 // ============================================================================
-// Community bracket engine
+// Community bracket engine — SEEDED PLAY-IN model
 // ----------------------------------------------------------------------------
 // The community model: every member runs their OWN copy of an album's bracket.
-// Round 1 pairings are identical for everyone (derived from the same songs the
-// family bracket uses, or auto-generated from the album tracklist if no family
-// bracket exists). From round 2 on, each member's bracket advances based on
-// THEIR OWN picks — so two members can face entirely different matchups later.
+// Round-1 pairings are identical for everyone (built from the album's SEED
+// ORDER — see below). From the next round on, each member's bracket advances
+// based on THEIR OWN picks, so two members can face entirely different matchups
+// later.
 //
-// BYES: A real single-elimination bracket needs a power-of-two field. When the
-// number of songs isn't a power of two, some songs get a "bye" — a free pass.
-// Byes ALWAYS live in round 1 (the preliminaries): a bye song skips round 1 and
-// enters directly in round 2. This keeps round 2 onward a clean power-of-two
-// bracket with NO stray byes in the quarterfinals/semifinals/championship.
+// SEEDED PLAY-IN STRUCTURE (like the NCAA "First Four" -> Round of 64):
+// A clean single-elimination bracket needs a power-of-two main field. When an
+// album's song count N isn't a power of two, the LOWEST seeds play preliminary
+// ("play-in") games; the winners join the TOP seeds in a full main round. There
+// are NO byes when the math works out (which is essentially always for these
+// album sizes). Concretely, given N seeded songs:
+//
+//   M            = largest power of two <= N        (main-bracket field size)
+//   prelimGames  = N - M                            (play-in games)
+//   directSeeds  = M - prelimGames                  (top seeds entering directly)
+//
+// The lowest 2*prelimGames seeds (seeds directSeeds+1 .. N) play prelims,
+// paired strongest-vs-weakest. The top `directSeeds` seeds go straight into the
+// main round. The main round is laid out in standard single-elimination seed
+// order so seed 1 always faces the weakest opponent.
+//
+// Example — Down to Earth, 12 songs:
+//   M=8, prelimGames=4, directSeeds=4.
+//   Prelims (4 games): (5)v(12) (6)v(11) (7)v(10) (8)v(9).
+//   Quarters (4 games): seeds 1-4 vs the four prelim winners. -> Semis -> Final.
+//   Rounds: Preliminaries, Quarterfinals, Semifinals, Championship = 4 rounds.
+//
+// ROUND NUMBERING: when prelimGames > 0, the prelims are round 1 and the main
+// bracket starts at round 2. When N is already a power of two there are no
+// prelims and the main bracket starts at round 1.
 //
 // Album results are scored by WEIGHTED points across all members' picks:
 //   - a pick in an early round (prelims / quarters)      = 1 point
 //   - a pick in the semis (second-to-last round)         = 2 points
-//   - a pick in the championship (last/final round)      = 4 points
+//   - a pick in the championship (last round)            = 4 points
 // The album's community winner is the song with the most points. Ties are
 // listed alphabetically.
 // ============================================================================
@@ -37,138 +57,205 @@ export interface PersonalBracket {
   totalRounds: number;
   complete: boolean; // member has picked a champion (final round decided)
   champion: string | null;
-  // Songs that received a round-1 bye (auto-advance straight into round 2).
-  byes: string[];
+  // Whether round 1 is a preliminary (play-in) round. When true, the main
+  // bracket starts at round 2. Lets the UI label rounds correctly.
+  hasPrelims: boolean;
 }
 
-/** Smallest power of two >= n. This is the full bracket size B. */
-function smallestPow2AtLeast(n: number): number {
+/** Largest power of two <= n (the main-bracket field size). */
+function largestPow2AtMost(n: number): number {
   let p = 1;
-  while (p < n) p *= 2;
+  while (p * 2 <= n) p *= 2;
   return p;
 }
 
 /**
- * Build a structurally-correct round-1 from a flat, ordered list of songs,
- * placing all byes in round 1 so that round 2 onward is a clean power-of-two
- * bracket.
- *
- * Given N songs:
- *   B     = smallest power of two >= N      (full bracket size)
- *   byes  = B - N                           (songs that skip round 1)
- *   games = N - B/2                          (real round-1 matchups)
- *   After round 1, exactly B/2 songs advance (a power of two).
- *
- * Byes are spread as evenly as possible across the round-1 slots (rather than
- * clumped at the front) so the bracket stays balanced.
+ * Standard single-elimination seeding order for a bracket of `size` (a power of
+ * two). Returns an array of seed numbers (1-based) in slot order, so that the
+ * top seed meets the lowest seed, #2 meets the second-lowest, etc., and strong
+ * seeds can't meet until late. e.g. size 8 -> [1,8,4,5,2,7,3,6].
  */
-export function buildRoundOneFromSongs(
-  songs: string[],
-): { songA: string | null; songB: string | null }[] {
-  const clean = songs.filter((s): s is string => !!s && s.trim().length > 0);
-  const n = clean.length;
-  if (n === 0) return [];
-  if (n === 1) return [{ songA: clean[0], songB: null }];
-
-  const B = smallestPow2AtLeast(n);
-  const byes = B - n;
-  const totalSlots = B / 2; // each round-1 slot yields one round-2 entrant
-
-  // Decide which of the `totalSlots` slots are byes — spread evenly.
-  const isBye = new Array<boolean>(totalSlots).fill(false);
-  if (byes > 0) {
-    for (let k = 0; k < byes; k++) {
-      const pos = Math.min(
-        totalSlots - 1,
-        Math.floor((k + 0.5) * (totalSlots / byes)),
-      );
-      isBye[pos] = true;
+function seedSlots(size: number): number[] {
+  let slots = [1, 2];
+  while (slots.length < size) {
+    const n = slots.length * 2;
+    const next: number[] = [];
+    for (const s of slots) {
+      next.push(s);
+      next.push(n + 1 - s);
     }
-    // Correct any rounding collisions so exactly `byes` slots are flagged.
-    let flagged = isBye.filter(Boolean).length;
-    for (let i = 0; flagged < byes && i < totalSlots; i++) {
-      if (!isBye[i]) { isBye[i] = true; flagged++; }
-    }
-    for (let i = totalSlots - 1; flagged > byes && i >= 0; i--) {
-      if (isBye[i]) { isBye[i] = false; flagged--; }
-    }
+    slots = next;
   }
-
-  // Walk songs in order, filling slots: a bye consumes 1 song, a game 2.
-  const matches: { songA: string | null; songB: string | null }[] = [];
-  let s = 0;
-  for (let slot = 0; slot < totalSlots; slot++) {
-    if (isBye[slot]) {
-      matches.push({ songA: clean[s++] ?? null, songB: null });
-    } else {
-      matches.push({ songA: clean[s++] ?? null, songB: clean[s++] ?? null });
-    }
-  }
-  return matches;
+  return slots;
 }
 
 /**
- * Build the round-1 pairings shared by all members for an album.
- *
- * Preference order:
- *   1. The songs in the family bracket's round-1 matches — keeps the community
- *      competing over the same songs the family did. We re-seed those songs
- *      through buildRoundOneFromSongs so the structure (and bye placement) is
- *      always valid even if the family's round 1 wasn't a power of two.
- *   2. If no family round 1 exists, seed from the album tracklist in listed
- *      order.
+ * A slot in the (power-of-two) main round. It's filled either by a song that
+ * was seeded directly into the main bracket, or by the winner of one of the
+ * preliminary play-in games.
+ */
+export type MainSlot =
+  | { kind: "direct"; song: string }
+  | { kind: "prelimWinner"; prelimIndex: number };
+
+export interface SeededBracket {
+  // Round-1 matchups shared by all members (prelims if any, else main round 1).
+  roundOne: { songA: string | null; songB: string | null }[];
+  // Total number of rounds the completed bracket will have.
+  totalRounds: number;
+  // True when roundOne is a preliminary play-in round.
+  hasPrelims: boolean;
+  // When hasPrelims is true, this describes how the FIRST main round (round 2)
+  // is assembled: a flat list of slots in slot order, where consecutive pairs
+  // (0,1), (2,3), ... form the main-round matchups. Each slot is either a
+  // directly-seeded song or the winner of a specific prelim game. Empty when
+  // there are no prelims (the main round is then just roundOne).
+  mainSlots: MainSlot[];
+}
+
+/**
+ * Build the shared, structurally-correct seeded play-in bracket from an ordered
+ * list of songs by SEED (index 0 = seed 1 = strongest). Returns the round-1
+ * pairings plus metadata. Round 1 is the prelims when N isn't a power of two;
+ * otherwise round 1 is the (power-of-two) main round.
+ */
+export function buildSeededBracket(seedOrder: string[]): SeededBracket {
+  const seeds = seedOrder.filter((s): s is string => !!s && s.trim().length > 0);
+  const n = seeds.length;
+  if (n === 0) return { roundOne: [], totalRounds: 0, hasPrelims: false, mainSlots: [] };
+  if (n === 1)
+    return { roundOne: [{ songA: seeds[0], songB: null }], totalRounds: 1, hasPrelims: false, mainSlots: [] };
+
+  const song = (seed: number): string => seeds[seed - 1]; // seed is 1-based
+
+  const M = largestPow2AtMost(n); // main field size
+  const prelimGames = n - M; // play-in games
+  const directSeeds = M - prelimGames; // top seeds entering main round directly
+
+  const mainRounds = Math.round(Math.log2(M)); // rounds in the main bracket
+  const hasPrelims = prelimGames > 0;
+  const totalRounds = (hasPrelims ? 1 : 0) + mainRounds;
+
+  if (!hasPrelims) {
+    // N is a power of two: round 1 is the main round, paired in seed order.
+    const order = seedSlots(M);
+    const roundOne: { songA: string | null; songB: string | null }[] = [];
+    for (let i = 0; i < order.length; i += 2) {
+      roundOne.push({ songA: song(order[i]), songB: song(order[i + 1]) });
+    }
+    return { roundOne, totalRounds, hasPrelims, mainSlots: [] };
+  }
+
+  // Prelims: lowest 2*prelimGames seeds (directSeeds+1 .. n), strongest vs
+  // weakest. P_k (k=1..prelimGames, 0-based index k-1) pairs seed
+  // (directSeeds + k) against seed (n + 1 - k). The WINNER inherits the better
+  // seed number (directSeeds + k) and takes that seed's slot in the main round.
+  const roundOne: { songA: string | null; songB: string | null }[] = [];
+  for (let k = 1; k <= prelimGames; k++) {
+    const hi = directSeeds + k; // better (higher) seed
+    const lo = n + 1 - k; // weaker (lower) seed
+    roundOne.push({ songA: song(hi), songB: song(lo) });
+  }
+
+  // Main round (round 2): lay out the M-slot field in standard seed order.
+  // Seeds 1..directSeeds are direct songs. Seeds directSeeds+1..M are filled by
+  // the winner of prelim game (seed - directSeeds), i.e. 1-based prelim index.
+  const order = seedSlots(M); // seed number per slot, length M
+  const mainSlots: MainSlot[] = order.map(seed => {
+    if (seed <= directSeeds) return { kind: "direct", song: song(seed) };
+    return { kind: "prelimWinner", prelimIndex: seed - directSeeds - 1 }; // 0-based
+  });
+
+  return { roundOne, totalRounds, hasPrelims, mainSlots };
+}
+
+/**
+ * Resolve an album's seed order. The seed order is the source of truth for the
+ * seeded bracket. Preference:
+ *   1. An explicit, admin-set seedOrder (JSON array of titles seed 1..N),
+ *      filtered to titles that still exist on the album's tracklist, then any
+ *      tracklist songs not present in the seed order appended in track order
+ *      (so newly added tracks still appear, ranked last).
+ *   2. Otherwise the album tracklist in listed (track) order.
+ * `familyMatches` is accepted for signature compatibility but no longer used to
+ * derive structure — seeds drive everything now.
+ */
+export function resolveSeedOrder(
+  seedOrderJson: string | null | undefined,
+  tracks: string[],
+  _familyMatches?: BracketMatch[],
+): string[] {
+  const cleanTracks = tracks.filter((s): s is string => !!s && s.trim().length > 0);
+  if (!seedOrderJson) return cleanTracks;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(seedOrderJson);
+  } catch {
+    return cleanTracks;
+  }
+  if (!Array.isArray(parsed)) return cleanTracks;
+
+  const trackSet = new Set(cleanTracks);
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const t of parsed) {
+    if (typeof t === "string" && trackSet.has(t) && !seen.has(t)) {
+      ordered.push(t);
+      seen.add(t);
+    }
+  }
+  // Append any tracklist songs missing from the seed order, in track order.
+  for (const t of cleanTracks) {
+    if (!seen.has(t)) {
+      ordered.push(t);
+      seen.add(t);
+    }
+  }
+  return ordered;
+}
+
+/**
+ * Build the round-1 pairings (+ metadata) shared by all members for an album,
+ * from its resolved seed order.
  */
 export function buildRoundOne(
-  familyMatches: BracketMatch[],
+  seedOrderJson: string | null | undefined,
   tracks: string[],
-): { songA: string | null; songB: string | null }[] {
-  const familyR1 = familyMatches
-    .filter(m => m.round === 1)
-    .sort((a, b) => a.matchIndex - b.matchIndex);
-
-  if (familyR1.length > 0) {
-    // Collect the participating songs in match/slot order (songA then songB).
-    const songs: string[] = [];
-    for (const m of familyR1) {
-      if (m.songA) songs.push(m.songA);
-      if (m.songB) songs.push(m.songB);
-    }
-    return buildRoundOneFromSongs(songs);
-  }
-
-  // Auto-generate from the tracklist.
-  return buildRoundOneFromSongs(tracks);
-}
-
-/** The list of songs receiving a round-1 bye, in bracket order. */
-export function byeSongsOf(
-  roundOne: { songA: string | null; songB: string | null }[],
-): string[] {
-  return roundOne
-    .filter(m => (m.songA && !m.songB) || (m.songB && !m.songA))
-    .map(m => (m.songA || m.songB) as string);
+  familyMatches?: BracketMatch[],
+): SeededBracket {
+  const seeds = resolveSeedOrder(seedOrderJson, tracks, familyMatches);
+  return buildSeededBracket(seeds);
 }
 
 /**
- * Derive a single member's personal bracket from the shared round-1 pairings
- * plus that member's own picks. Each round's matchups are computed from the
- * member's picks in the previous round (winners advance, paired by index).
- *
- * A round-1 bye (one song null) auto-advances the present song into round 2 —
- * we do NOT record a pick for byes; the song simply carries forward. Because
- * byes only ever appear in round 1, every later round is a clean two-song
- * matchup.
+ * Derive a single member's personal bracket from the shared seeded bracket plus
+ * that member's own picks. Each round's matchups are computed from the member's
+ * picks in the previous round (winners advance, paired by index). With the
+ * seeded play-in model there are no byes — every round-1 slot is a real game,
+ * and each subsequent round is a clean two-song matchup.
  */
 export function derivePersonalBracket(
-  roundOne: { songA: string | null; songB: string | null }[],
+  seeded: SeededBracket,
   picks: CommunityBracketPick[],
 ): PersonalBracket {
+  const { roundOne, totalRounds, hasPrelims, mainSlots } = seeded;
+
   const pickFor = (round: number, matchIndex: number): string | null =>
     picks.find(p => p.round === round && p.matchIndex === matchIndex)?.songPicked ?? null;
 
   const rounds: PersonalMatch[][] = [];
 
-  // Round 1 from the shared pairings.
+  // The "winner" carried forward for a match: an explicit pick, or the only
+  // present song (defensive — a single-song matchup auto-advances).
+  const winnerOf = (m: PersonalMatch): string | null => {
+    if (m.pick) return m.pick;
+    if (m.songA && !m.songB) return m.songA;
+    if (m.songB && !m.songA) return m.songB;
+    return null;
+  };
+
+  // Round 1 from the shared pairings (prelims when hasPrelims, else main round).
   let current: PersonalMatch[] = roundOne.map((pr, idx) => ({
     round: 1,
     matchIndex: idx,
@@ -178,18 +265,45 @@ export function derivePersonalBracket(
   }));
   rounds.push(current);
 
-  // The "winner" carried forward for a match: an explicit pick, or the only
-  // present song when the other side is a bye.
-  const winnerOf = (m: PersonalMatch): string | null => {
-    if (m.pick) return m.pick;
-    if (m.songA && !m.songB) return m.songA;
-    if (m.songB && !m.songA) return m.songB;
-    return null;
-  };
-
   let roundNum = 1;
-  // Keep building rounds while the current round narrows toward a single match
-  // AND every match in the current round has a resolved winner (pick or bye).
+
+  // Special transition: prelims (round 1) -> the full main round (round 2),
+  // assembled from mainSlots. Direct-seed slots are fixed songs; prelim-winner
+  // slots resolve to the member's prelim pick (null until they pick). The main
+  // round is only formed once EVERY prelim game the main round depends on has a
+  // winner — matching the all-or-nothing advance rule used for later rounds.
+  if (hasPrelims && mainSlots.length > 0) {
+    const prelimWinners = current.map(winnerOf);
+    const resolveSlot = (slot: MainSlot): string | null =>
+      slot.kind === "direct" ? slot.song : (prelimWinners[slot.prelimIndex] ?? null);
+
+    // Need every prelim that feeds a slot to be decided before forming round 2.
+    const neededPrelims = mainSlots
+      .filter((s): s is { kind: "prelimWinner"; prelimIndex: number } => s.kind === "prelimWinner")
+      .map(s => s.prelimIndex);
+    const allPrelimsDecided = neededPrelims.every(pi => prelimWinners[pi] != null);
+
+    if (allPrelimsDecided) {
+      roundNum = 2;
+      const next: PersonalMatch[] = [];
+      for (let i = 0; i < mainSlots.length; i += 2) {
+        const idx = next.length;
+        next.push({
+          round: 2,
+          matchIndex: idx,
+          songA: resolveSlot(mainSlots[i]),
+          songB: resolveSlot(mainSlots[i + 1]),
+          pick: pickFor(2, idx),
+        });
+      }
+      rounds.push(next);
+      current = next;
+    } else {
+      // Prelims not all decided yet — bracket stops at round 1.
+      current = [] as PersonalMatch[];
+    }
+  }
+
   while (current.length > 1) {
     const winners = current.map(winnerOf);
     // If any match in the current round is unresolved, the next round can't be
@@ -214,26 +328,16 @@ export function derivePersonalBracket(
     current = next;
   }
 
-  // totalRounds is the number of rounds the FULL bracket will have once
-  // completed. With byes correctly placed in round 1, the matchup count halves
-  // exactly each round from roundOne.length down to 1.
-  const computedTotalRounds = (() => {
-    let n = roundOne.length;
-    let r = 1;
-    while (n > 1) { n = Math.ceil(n / 2); r += 1; }
-    return r;
-  })();
-
   const finalRound = rounds[rounds.length - 1];
   const champion = finalRound.length === 1 ? winnerOf(finalRound[0]) : null;
   const complete = finalRound.length === 1 && champion != null;
 
   return {
     rounds,
-    totalRounds: computedTotalRounds,
+    totalRounds,
     complete,
     champion,
-    byes: byeSongsOf(roundOne),
+    hasPrelims,
   };
 }
 
@@ -243,8 +347,6 @@ export function derivePersonalBracket(
  *   championship (last round)        -> 4
  *   semis (second-to-last round)     -> 2
  *   everything earlier               -> 1
- * For tiny brackets (1-2 rounds) we still honor the championship = 4 / semis = 2
- * mapping relative to the last round.
  */
 export function weightForRound(round: number, totalRounds: number): number {
   if (round === totalRounds) return 4; // championship
@@ -260,22 +362,14 @@ export interface StandingRow {
 }
 
 /**
- * Compute the weighted album standings across ALL members' picks. We need each
- * member's personal bracket to know which round a pick sat in (for weighting),
- * but since picks already carry their round, we can weight directly from the
- * pick rows. `totalRounds` is derived from the shared round-1 pairing count.
+ * Compute the weighted album standings across ALL members' picks. Picks already
+ * carry their round, so we weight directly from the pick rows. `totalRounds`
+ * comes from the shared seeded bracket.
  */
 export function computeStandings(
-  roundOneLength: number,
+  totalRounds: number,
   allPicks: CommunityBracketPick[],
 ): { totalRounds: number; ranked: StandingRow[]; winner: string | null; voterCount: number } {
-  const totalRounds = (() => {
-    let n = roundOneLength;
-    let r = 1;
-    while (n > 1) { n = Math.ceil(n / 2); r += 1; }
-    return r;
-  })();
-
   // song -> round -> votes
   const bySong: Record<string, Record<number, number>> = {};
   const voters = new Set<number>();
@@ -285,8 +379,8 @@ export function computeStandings(
     bySong[p.songPicked][p.round] = (bySong[p.songPicked][p.round] ?? 0) + 1;
   }
 
-  const ranked: StandingRow[] = Object.entries(bySong).map(([songTitle, rounds]) => {
-    const breakdown = Object.entries(rounds)
+  const ranked: StandingRow[] = Object.entries(bySong).map(([songTitle, roundsMap]) => {
+    const breakdown = Object.entries(roundsMap)
       .map(([rStr, votes]) => {
         const round = Number(rStr);
         const weight = weightForRound(round, totalRounds);
@@ -304,7 +398,6 @@ export function computeStandings(
     return a.songTitle.localeCompare(b.songTitle);
   });
 
-  // Winner = top of the ranked list, but only if there are any picks at all.
   let winner: string | null = null;
   if (ranked.length > 0) {
     const top = ranked[0];

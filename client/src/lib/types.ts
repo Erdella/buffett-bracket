@@ -5,6 +5,9 @@ export interface Album {
   orderIndex: number;
   tracks: string[];
   coverUrl: string | null;
+  // JSON-string seed order on the wire is parsed server-side; the client only
+  // ever sees the resolved order via the /seeds endpoint.
+  seedOrder?: string | null;
 }
 
 export interface Player {
@@ -113,8 +116,9 @@ export interface PersonalBracket {
   totalRounds: number;
   complete: boolean;
   champion: string | null;
-  // Songs that received a round-1 bye (auto-advance into round 2).
-  byes: string[];
+  // Whether round 1 is a preliminary (play-in) round. When true the main
+  // bracket starts at round 2.
+  hasPrelims: boolean;
 }
 
 export interface MyBracketData {
@@ -134,6 +138,19 @@ export interface CommunityStandings {
   ranked: StandingRow[];
   winner: string | null;
   voterCount: number;
-  // Songs that received a round-1 bye (auto-advance into round 2).
-  byes: string[];
+  // True when round 1 is a preliminary (play-in) round, so the standings
+  // breakdown can label round-1 picks "Preliminaries" rather than "Round".
+  hasPrelims: boolean;
+}
+
+// ----- community: per-album seeding (admin) -----
+export interface AlbumSeeds {
+  // Resolved seed order, seed 1 (best) -> seed N, in slot order.
+  seedOrder: string[];
+  // True when an explicit admin seed order has been saved (vs. track default).
+  isCustom: boolean;
+  totalRounds: number;
+  hasPrelims: boolean;
+  prelimGames: number;
+  roundOne: { songA: string | null; songB: string | null }[];
 }

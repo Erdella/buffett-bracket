@@ -8,20 +8,25 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, FastForward } from "lucide-react";
+import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote } from "lucide-react";
 
 /**
- * Human label for a round given its position relative to the final round.
- *   last round        -> Championship (4 pts)
- *   second-to-last    -> Semifinals   (2 pts)
+ * Human label for a round given its position relative to the final round, and
+ * whether round 1 is a preliminary (play-in) round.
+ *   last round        -> Championship  (4 pts)
+ *   second-to-last    -> Semifinals    (2 pts)
  *   third-to-last     -> Quarterfinals (1 pt)
- *   anything earlier  -> Round N / Prelims (1 pt)
+ *   round 1 (prelims) -> Preliminaries (1 pt)
+ *   anything earlier  -> Round N       (1 pt)
  */
-export function roundLabel(round: number, totalRounds: number): string {
+export function roundLabel(round: number, totalRounds: number, hasPrelims = false): string {
+  // Prelims (play-in) are always round 1 when present; check first so the
+  // generic "Round of 16" position check below can't shadow it.
+  if (hasPrelims && round === 1) return "Preliminaries";
   if (round === totalRounds) return "Championship";
   if (round === totalRounds - 1) return "Semifinals";
   if (round === totalRounds - 2) return "Quarterfinals";
-  if (round === 1) return "Preliminaries";
+  if (round === totalRounds - 3) return "Round of 16";
   return `Round ${round}`;
 }
 
@@ -81,37 +86,18 @@ export function CommunityBracket({ album }: { album: Album }) {
   }
 
   const bracket = myBracket.data.bracket;
-  const { totalRounds } = bracket;
-  const byes = bracket.byes ?? [];
+  const { totalRounds, hasPrelims } = bracket;
 
   return (
     <div className="space-y-6">
-      {byes.length > 0 && (
-        <Card className="border-amber-500/40 bg-amber-500/5" data-testid="card-byes">
-          <CardContent className="py-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <FastForward className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <h3 className="font-display font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>
-                Round 1 byes — these songs skip straight to Round 2
-              </h3>
-            </div>
+      {hasPrelims && (
+        <Card className="border-primary/30 bg-primary/5" data-testid="card-prelims-note">
+          <CardContent className="py-3">
             <p className="text-[11px] text-muted-foreground">
-              This album doesn't have a power-of-two number of songs, so {byes.length}{" "}
-              {byes.length === 1 ? "song gets" : "songs get"} a free pass through the
-              preliminaries and {byes.length === 1 ? "enters" : "enter"} the next round automatically.
+              This album has a few extra songs, so the lowest seeds face off in a{" "}
+              <strong className="text-foreground">preliminary round</strong> first. The top seeds wait
+              in the quarterfinals, where the prelim winners join them.
             </p>
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {byes.map(song => (
-                <Badge
-                  key={song}
-                  variant="outline"
-                  className="text-[11px] gap-1 border-amber-500/40"
-                  data-testid={`badge-bye-${song}`}
-                >
-                  <FastForward className="h-3 w-3" /> {song}
-                </Badge>
-              ))}
-            </div>
           </CardContent>
         </Card>
       )}
@@ -151,7 +137,7 @@ export function CommunityBracket({ album }: { album: Album }) {
             <div key={round} className="space-y-3" data-testid={`round-${round}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-display font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>
-                  {roundLabel(round, totalRounds)}
+                  {roundLabel(round, totalRounds, hasPrelims)}
                 </h3>
                 <Badge variant="secondary" className="text-[10px] gap-1">
                   <Trophy className="h-3 w-3" /> {pts} {pts === 1 ? "pt" : "pts"} / pick
@@ -277,7 +263,7 @@ export function CommunityStandingsPanel({ album }: { album: Album }) {
     return <div className="h-40 rounded-xl bg-muted animate-pulse" />;
   }
 
-  const { ranked, winner, voterCount, totalRounds } = standings.data;
+  const { ranked, winner, voterCount, totalRounds, hasPrelims } = standings.data;
   const maxPoints = ranked.length > 0 ? ranked[0].points : 0;
   // Detect a true tie at the top (several share the leading point total).
   const topTie = ranked.length > 1 && ranked[0].points > 0 && ranked[0].points === ranked[1].points;
@@ -342,7 +328,7 @@ export function CommunityStandingsPanel({ album }: { album: Album }) {
                       {row.breakdown
                         .slice()
                         .sort((a, b) => b.round - a.round)
-                        .map(b => `${b.votes}×${roundLabel(b.round, totalRounds).split(" ")[0]}`)
+                        .map(b => `${b.votes}×${roundLabel(b.round, totalRounds, hasPrelims).split(" ")[0]}`)
                         .join(" · ")}
                     </div>
                   </div>

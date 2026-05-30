@@ -7,6 +7,7 @@ const seedAlbums: SeedAlbum[] = [
     "tracks": [
       "The Christian?",
       "Ellis Dee (He Ain't Free)",
+      "Richard Frost",
       "The Missionary",
       "A Mile High in Denver",
       "The Captain and the Kid",

@@ -176,3 +176,27 @@ export const communityFavorites = sqliteTable("community_favorites", {
 });
 
 export type CommunityFavorite = typeof communityFavorites.$inferSelect;
+
+// ---------- Community Bracket Picks (per-member personal bracket) ----------
+// The NEW community model. Each member runs their OWN copy of the album
+// bracket: everyone starts from the same round-1 pairings (identical to the
+// family bracket), but each member's chosen winners advance to the next round
+// on THEIR personal bracket. So two members can have completely different
+// round-2+ matchups. One row per (album, member, round, matchIndex) recording
+// the song that member picked to win that matchup.
+//
+// Album-level results are computed by WEIGHTED points across all members'
+// picks: a vote in an early round (prelims/quarters) = 1 pt, a vote in the
+// semis (2nd-to-last round) = 2 pts, a vote in the championship (last round)
+// = 4 pts. The album's community winner is the song with the most points;
+// ties are broken alphabetically.
+export const communityBracketPicks = sqliteTable("community_bracket_picks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  albumId: integer("album_id").notNull(),
+  memberId: integer("member_id").notNull(),
+  round: integer("round").notNull(),
+  matchIndex: integer("match_index").notNull(),
+  songPicked: text("song_picked").notNull(),
+});
+
+export type CommunityBracketPick = typeof communityBracketPicks.$inferSelect;

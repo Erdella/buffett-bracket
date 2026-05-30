@@ -4,12 +4,10 @@ import type { Album, AlbumStatus, AlbumResult, Player } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlbumBracketEditor } from "@/components/album-bracket-editor";
 import { AlbumCover } from "@/components/album-cover";
-import { CommunityVoting } from "@/components/community-voting";
-import { AlbumFavoritePicker } from "@/components/album-favorite-picker";
+import { AlbumArena } from "@/components/album-arena";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -108,20 +106,8 @@ export default function AlbumDetail() {
         </CardContent>
       </Card>
 
-      {/* Full editor — works the same for current album, in-progress backfill, and completed albums */}
-      <AlbumBracketEditor album={a} />
-
-      {/* Parrothead Madness community layer for this album */}
-      <section className="space-y-3">
-        <h2 className="font-display text-xl font-bold flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
-          <Users className="h-5 w-5 text-primary" /> Parrothead Madness
-        </h2>
-        <CommunityVoting album={a} />
-      </section>
-
-      <section>
-        <AlbumFavoritePicker album={a} />
-      </section>
+      {/* Family bracket + community voting, cleanly separated by tab. */}
+      <AlbumArena album={a} />
 
       <section>
         <h2 className="font-display text-xl font-bold mb-3 flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>

@@ -1,6 +1,7 @@
 import {
   albums, players, settings, albumResults, albumStatus, bracketMatches, matchVotes,
   members, loginTokens, communityRound, communityVotes, communityFavorites,
+  communityBracketPicks,
 } from "@shared/schema";
 import type {
   Album, InsertAlbum,
@@ -9,7 +10,7 @@ import type {
   AlbumStatus, InsertAlbumStatus,
   BracketMatch, InsertBracketMatch,
   MatchVote,
-  Member, LoginToken, CommunityVote, CommunityFavorite,
+  Member, LoginToken, CommunityVote, CommunityFavorite, CommunityBracketPick,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
@@ -86,6 +87,15 @@ export interface IStorage {
   deleteCommunityFavorite(albumId: number, memberId: number): Promise<void>;
   listCommunityFavorites(albumId: number): Promise<CommunityFavorite[]>;
   listAllCommunityFavorites(): Promise<CommunityFavorite[]>;
+  // community bracket picks (per-member personal bracket)
+  listCommunityPicksForAlbum(albumId: number): Promise<CommunityBracketPick[]>;
+  listCommunityPicksForMember(albumId: number, memberId: number): Promise<CommunityBracketPick[]>;
+  listAllCommunityPicks(): Promise<CommunityBracketPick[]>;
+  upsertCommunityPick(albumId: number, memberId: number, round: number, matchIndex: number, songPicked: string): Promise<CommunityBracketPick>;
+  // Remove a member's picks for an album at the given round and every round
+  // after it (used when an earlier pick changes and downstream picks are now
+  // invalid because the bracket re-derives).
+  deleteCommunityPicksFromRound(albumId: number, memberId: number, fromRound: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -384,6 +394,50 @@ export class DatabaseStorage implements IStorage {
   }
   async listAllCommunityFavorites(): Promise<CommunityFavorite[]> {
     return db.select().from(communityFavorites).all();
+  }
+
+  // ----- community bracket picks (per-member personal bracket) -----
+  async listCommunityPicksForAlbum(albumId: number): Promise<CommunityBracketPick[]> {
+    return db.select().from(communityBracketPicks)
+      .where(eq(communityBracketPicks.albumId, albumId))
+      .orderBy(asc(communityBracketPicks.round), asc(communityBracketPicks.matchIndex))
+      .all();
+  }
+  async listCommunityPicksForMember(albumId: number, memberId: number): Promise<CommunityBracketPick[]> {
+    return db.select().from(communityBracketPicks)
+      .where(and(eq(communityBracketPicks.albumId, albumId), eq(communityBracketPicks.memberId, memberId)))
+      .orderBy(asc(communityBracketPicks.round), asc(communityBracketPicks.matchIndex))
+      .all();
+  }
+  async listAllCommunityPicks(): Promise<CommunityBracketPick[]> {
+    return db.select().from(communityBracketPicks).all();
+  }
+  async upsertCommunityPick(
+    albumId: number, memberId: number, round: number, matchIndex: number, songPicked: string,
+  ): Promise<CommunityBracketPick> {
+    const existing = db.select().from(communityBracketPicks)
+      .where(and(
+        eq(communityBracketPicks.albumId, albumId),
+        eq(communityBracketPicks.memberId, memberId),
+        eq(communityBracketPicks.round, round),
+        eq(communityBracketPicks.matchIndex, matchIndex),
+      ))
+      .get();
+    if (existing) {
+      return db.update(communityBracketPicks).set({ songPicked })
+        .where(eq(communityBracketPicks.id, existing.id)).returning().get();
+    }
+    return db.insert(communityBracketPicks)
+      .values({ albumId, memberId, round, matchIndex, songPicked }).returning().get();
+  }
+  async deleteCommunityPicksFromRound(albumId: number, memberId: number, fromRound: number): Promise<void> {
+    const rows = db.select().from(communityBracketPicks)
+      .where(and(eq(communityBracketPicks.albumId, albumId), eq(communityBracketPicks.memberId, memberId)))
+      .all();
+    const idsToDelete = rows.filter(r => r.round >= fromRound).map(r => r.id);
+    if (idsToDelete.length > 0) {
+      db.delete(communityBracketPicks).where(inArray(communityBracketPicks.id, idsToDelete)).run();
+    }
   }
 }
 

@@ -15,6 +15,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import seedAlbums from "./seed-albums";
 import { sendMagicLink, mailConfigured } from "./email";
+import { buildRoundOne, derivePersonalBracket, computeStandings } from "./community-bracket";
 
 // Public base URL used to build magic links. Falls back to the request origin.
 const APP_BASE_URL = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
@@ -61,6 +62,7 @@ if (!ADMIN_PASSWORD_HASH) {
 const MEMBER_MUTATION_PATHS = [
   "/api/community/vote",
   "/api/community/favorite",
+  "/api/community/pick",
   "/api/member/logout",
 ];
 // Public (no-auth) mutation endpoints: the magic-link flow itself.
@@ -191,6 +193,15 @@ async function ensureSchemaAndSeed() {
     song_title TEXT NOT NULL
   )`);
   db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_community_favorites_album_member ON community_favorites(album_id, member_id)`);
+  db.run(sql`CREATE TABLE IF NOT EXISTS community_bracket_picks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    album_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    round INTEGER NOT NULL,
+    match_index INTEGER NOT NULL,
+    song_picked TEXT NOT NULL
+  )`);
+  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_community_picks_unique ON community_bracket_picks(album_id, member_id, round, match_index)`);
 
   // Seed albums if empty
   const existing = await storage.listAlbums();
@@ -763,6 +774,108 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const f = await storage.upsertCommunityFavorite(albumId, req.session.memberId!, songTitle);
     res.json(f);
+  });
+
+  // ========================================================================
+  // COMMUNITY: per-member personal bracket + weighted standings (NEW MODEL)
+  // ------------------------------------------------------------------------
+  // Everyone starts from the same round-1 pairings (the family bracket's
+  // round 1, or auto-generated from the tracklist). Each member picks winners
+  // all the way through THEIR OWN bracket; their picks advance on their own
+  // copy. Album results are scored with weighted points (early=1, semis=2,
+  // championship=4).
+  // ========================================================================
+
+  // The signed-in member's personal bracket for an album: the matchups they
+  // currently face round-by-round, plus which song they've picked in each.
+  app.get("/api/albums/:id/my-bracket", async (req, res) => {
+    const albumId = Number(req.params.id);
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+    const tracks = JSON.parse(album.tracks) as string[];
+    const familyMatches = await storage.listBracketMatches(albumId);
+    const roundOne = buildRoundOne(familyMatches, tracks);
+
+    if (roundOne.length === 0) {
+      return res.json({ available: false, bracket: null });
+    }
+
+    const picks = req.session.memberId
+      ? await storage.listCommunityPicksForMember(albumId, req.session.memberId)
+      : [];
+    const bracket = derivePersonalBracket(roundOne, picks);
+    res.json({ available: true, bracket });
+  });
+
+  // Submit / change a pick on the member's personal bracket. Picking a winner
+  // in round N invalidates that member's downstream picks (rounds > N) because
+  // their bracket re-derives from this pick — so we clear them.
+  app.post("/api/community/pick", async (req, res) => {
+    try {
+      const schema = z.object({
+        albumId: z.number().int().positive(),
+        round: z.number().int().positive(),
+        matchIndex: z.number().int().min(0),
+        songPicked: z.string().min(1),
+      });
+      const { albumId, round, matchIndex, songPicked } = schema.parse(req.body);
+      const memberId = req.session.memberId!;
+
+      const album = await storage.getAlbum(albumId);
+      if (!album) return res.status(404).json({ error: "Album not found" });
+      const tracks = JSON.parse(album.tracks) as string[];
+      const familyMatches = await storage.listBracketMatches(albumId);
+      const roundOne = buildRoundOne(familyMatches, tracks);
+      if (roundOne.length === 0) {
+        return res.status(400).json({ error: "No bracket exists for this album yet." });
+      }
+
+      // Re-derive the member's current bracket and validate the pick is for a
+      // matchup that actually exists for them, with one of its two songs.
+      const existingPicks = await storage.listCommunityPicksForMember(albumId, memberId);
+      const bracket = derivePersonalBracket(roundOne, existingPicks);
+      const roundMatches = bracket.rounds[round - 1];
+      if (!roundMatches) {
+        return res.status(400).json({ error: "That round isn't open on your bracket yet." });
+      }
+      const match = roundMatches.find(m => m.matchIndex === matchIndex);
+      if (!match) {
+        return res.status(400).json({ error: "That matchup isn't on your bracket yet." });
+      }
+      if (songPicked !== match.songA && songPicked !== match.songB) {
+        return res.status(400).json({ error: "Pick must be one of the two songs in that matchup." });
+      }
+
+      // If this changes an existing pick, clear downstream picks (rounds > round)
+      // so the bracket re-derives cleanly. Only clear when the pick actually
+      // changed to avoid wiping work on a no-op re-submit.
+      const prior = existingPicks.find(p => p.round === round && p.matchIndex === matchIndex);
+      if (prior && prior.songPicked !== songPicked) {
+        await storage.deleteCommunityPicksFromRound(albumId, memberId, round + 1);
+      }
+      const saved = await storage.upsertCommunityPick(albumId, memberId, round, matchIndex, songPicked);
+
+      // Return the freshly re-derived bracket so the client updates in one round-trip.
+      const updatedPicks = await storage.listCommunityPicksForMember(albumId, memberId);
+      const updated = derivePersonalBracket(roundOne, updatedPicks);
+      res.json({ saved, bracket: updated });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Weighted community standings for an album: ranked songs with points and a
+  // per-round breakdown, the crowned winner, and participation count.
+  app.get("/api/albums/:id/community-standings", async (req, res) => {
+    const albumId = Number(req.params.id);
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+    const tracks = JSON.parse(album.tracks) as string[];
+    const familyMatches = await storage.listBracketMatches(albumId);
+    const roundOne = buildRoundOne(familyMatches, tracks);
+    const allPicks = await storage.listCommunityPicksForAlbum(albumId);
+    const standings = computeStandings(roundOne.length, allPicks);
+    res.json(standings);
   });
 
   // ========================================================================

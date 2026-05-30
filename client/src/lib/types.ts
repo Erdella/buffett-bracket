@@ -95,3 +95,38 @@ export interface AdminMember extends MemberInfo {
   blocked: boolean;
   voteCount: number;
 }
+
+// ----- community: per-member personal bracket (new model) -----
+export interface PersonalMatch {
+  round: number;
+  matchIndex: number;
+  songA: string | null;
+  songB: string | null;
+  pick: string | null;
+}
+
+export interface PersonalBracket {
+  rounds: PersonalMatch[][];
+  totalRounds: number;
+  complete: boolean;
+  champion: string | null;
+}
+
+export interface MyBracketData {
+  available: boolean;
+  bracket: PersonalBracket | null;
+}
+
+export interface StandingRow {
+  songTitle: string;
+  points: number;
+  votes: number;
+  breakdown: { round: number; weight: number; votes: number; points: number }[];
+}
+
+export interface CommunityStandings {
+  totalRounds: number;
+  ranked: StandingRow[];
+  winner: string | null;
+  voterCount: number;
+}

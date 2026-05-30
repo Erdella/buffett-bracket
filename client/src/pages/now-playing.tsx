@@ -4,11 +4,9 @@ import type { Album, AlbumStatus, Settings } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlbumBracketEditor } from "@/components/album-bracket-editor";
 import { AlbumCover } from "@/components/album-cover";
-import { CommunityVoting } from "@/components/community-voting";
-import { AlbumFavoritePicker } from "@/components/album-favorite-picker";
-import { Music, ArrowRight, Sparkles, Users } from "lucide-react";
+import { AlbumArena } from "@/components/album-arena";
+import { Music, ArrowRight, Sparkles } from "lucide-react";
 
 export default function NowPlaying() {
   const settings = useQuery<Settings>({ queryKey: ["/api/settings"] });
@@ -88,25 +86,7 @@ export default function NowPlaying() {
         </CardContent>
       </Card>
 
-      <AlbumBracketEditor album={currentAlbum} />
-
-      {/* Community (Parrothead Madness) voting + favorites for the live album */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          <h2 className="font-display text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            Parrothead Madness
-          </h2>
-        </div>
-        <p className="text-sm text-muted-foreground -mt-2">
-          The whole crew votes here. Each open round is tallied separately from the family bracket.
-        </p>
-        <CommunityVoting album={currentAlbum} />
-      </section>
-
-      <section>
-        <AlbumFavoritePicker album={currentAlbum} />
-      </section>
+      <AlbumArena album={currentAlbum} />
     </div>
   );
 }

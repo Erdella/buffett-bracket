@@ -1,6 +1,6 @@
 # Parrothead Madness
 
-A Jimmy Buffett song-by-song showdown. Each album gets its own bracket where five family members vote round-by-round until a champion emerges — and the wider **Parrothead Madness** community can join in with their own separate vote tally.
+A Jimmy Buffett song-by-song showdown. Each album gets its own bracket where five family members vote round-by-round until a champion emerges — and the wider **Parrothead Madness** community can join in by filling out their own personal brackets, scored with weighted points. Every album page splits the two contests into **Family** and **Community** tabs so the results never mix.
 
 Live demo: hosted on the family Proxmox box. The same code is also deployed to a public read-only viewer.
 
@@ -9,8 +9,9 @@ Live demo: hosted on the family Proxmox box. The same code is also deployed to a
 - Album-by-album brackets with prelim and round entries (any track in any round)
 - Five family voters: Tom, Renae, Danielle, Jon, Eric — majority wins, round advance is blocked until everyone votes
 - Personal favorites tracked per voter, separate from bracket voting
-- **Community voting (Parrothead Madness):** anyone can sign in with a passwordless magic link (powered by [Resend](https://resend.com)) and cast votes in a *separate* community tally, plus mark their favorite song on each album
-- **Admin-controlled community rounds:** open a round for community voting, then close it to lock the community's plurality winner into the bracket (only where a family winner isn't already set)
+- **Family / Community tabs:** every album page has two tabs. **Family** shows the five-voter family bracket (read-only for everyone but the admin). **Community** shows the public Parrothead Madness voting panel. The tab defaults to *Community* when a community member is signed in, and *Family* otherwise.
+- **Community voting (Parrothead Madness):** anyone can sign in with a passwordless magic link (powered by [Resend](https://resend.com)) and fill out their *own* personal bracket for each album, plus mark their favorite song. Everyone starts from the same round-1 matchups (taken from the family bracket, or auto-paired from the tracklist), then each person's own picks advance — so brackets diverge from round 2 on.
+- **Always-open, weighted scoring:** there are no rounds to open or close — community voting is always live. Songs earn weighted points across everyone's picks: **1 pt** for an early-round pick (prelims / quarters), **2 pts** in the semifinals, and **4 pts** in the championship. The album's community winner is the song with the most total points; ties are listed alphabetically.
 - **Member management:** see everyone who's signed in and block anyone who shouldn't be voting
 - Read-only by default — admin login (single password) unlocks all editing
 - SQLite persistence in a mounted volume so data survives container upgrades
@@ -123,14 +124,19 @@ ADMIN_PASSWORD_HASH='...' SESSION_SECRET='...' npm start
 
 There are two independent sign-in paths:
 
-- **Admin** — one password (set via `ADMIN_PASSWORD_HASH`) unlocks all editing: brackets, family votes, personal favorites, community rounds, and member management.
-- **Community member** — a passwordless magic link grants the ability to cast community votes and set album favorites, nothing more.
+- **Admin** — one password (set via `ADMIN_PASSWORD_HASH`) unlocks all editing: brackets, family votes, personal favorites, and member management.
+- **Community member** — a passwordless magic link grants the ability to fill out personal community brackets and set album favorites, nothing more.
 - Visitors with no session see everything but cannot vote, advance rounds, paste matchups, set favorites, or use the Admin page.
 - Sessions live in memory, last 30 days per browser, and clear on restart — fine for a family/community app.
 
 ### Family vs. community voting
 
-The two tallies are completely separate. The family bracket still requires all five family members to vote before a round advances. The **community** vote is a separate plurality count that the admin opens and closes per round; closing a round writes the community's winning song onto the bracket *only* for matches that don't already have a family-decided winner.
+The two contests are completely separate, surfaced on their own tabs on every album page.
+
+- **Family bracket** — the original five-voter contest (Tom, Renae, Danielle, Jon, Eric). Majority wins each matchup and a round won't advance until everyone has voted. Read-only for everyone but the admin.
+- **Community brackets** — each signed-in member runs their *own* copy of the bracket. Everyone begins from the same round-1 matchups, but from round 2 on each person's own picks advance, so no two brackets need to match. Voting is always open with live totals.
+
+Community results are scored by **weighted points** pooled across all members' picks: 1 pt per early-round pick, 2 pts in the semifinals, 4 pts in the championship. The song with the most points wins the album for the community (ties broken alphabetically). Nothing the community does ever writes onto the family bracket — the tallies stay fully independent.
 
 ## License
 

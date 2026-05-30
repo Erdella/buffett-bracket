@@ -143,6 +143,71 @@ export interface CommunityStandings {
   hasPrelims: boolean;
 }
 
+// ----- OG Parrothead Madness leaderboard -----
+export interface OGMemberAlbumStat {
+  albumId: number;
+  champion: string | null;
+  communityWinner: string | null;
+  championCorrect: boolean;
+  completed: boolean;
+  rawConsensus: number;
+  bestConsensus: number;
+  consensusPct: number;
+  r1Agree: number;
+  r1Total: number;
+}
+
+export interface OGMemberStat {
+  memberId: number;
+  albumsCompleted: number;
+  championsCorrect: number;
+  championAccuracy: number;
+  consensusScore: number;
+  albumsPlayed: number;
+  r1Agree: number;
+  r1Total: number;
+  r1Agreement: number;
+  perAlbum: OGMemberAlbumStat[];
+}
+
+export interface OGAlbumWinner {
+  albumId: number;
+  winner: string | null;
+  voterCount: number;
+  totalRounds: number;
+}
+
+export interface OGFavorite {
+  memberId: number;
+  albumId: number;
+  songTitle: string;
+}
+
+export interface OGTopPair {
+  memberA: number;
+  memberB: number;
+  shared: number;
+  agreed: number;
+  pct: number;
+}
+
+export interface OGLeaderboardData {
+  members: { id: number; displayName: string }[];
+  perMember: OGMemberStat[];
+  albumWinners: OGAlbumWinner[];
+  topPairs: OGTopPair[];
+  favorites: OGFavorite[];
+}
+
+export interface OGPairAgreement {
+  shared: number;
+  agreed: number;
+  pct: number;
+  sameChampion: boolean | null;
+  albumsBothCompleted: number;
+  sameChampionCount: number;
+}
+
 // ----- community: per-album seeding (admin) -----
 export interface AlbumSeeds {
   // Resolved seed order, seed 1 (best) -> seed N, in slot order.

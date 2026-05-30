@@ -149,7 +149,7 @@ export function MemberAuthButton() {
             <DialogHeader>
               <DialogTitle>Edit display name</DialogTitle>
               <DialogDescription>
-                This is the name shown on the community standings. Changing it updates everywhere you've voted.
+                This is the name shown on the OG Parrothead Madness standings. Changing it updates everywhere you've voted.
               </DialogDescription>
             </DialogHeader>
             <form

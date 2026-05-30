@@ -1,18 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import type { Album, AlbumStatus } from "@/lib/types";
+import type { Album, AlbumStatus, OGLeaderboardData } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlbumCover } from "@/components/album-cover";
-import { Trophy, ChevronRight } from "lucide-react";
+import { Trophy, ChevronRight, Users } from "lucide-react";
 
 export default function Results() {
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
   const statuses = useQuery<AlbumStatus[]>({ queryKey: ["/api/album-status"] });
+  const og = useQuery<OGLeaderboardData>({ queryKey: ["/api/community/leaderboard"] });
 
   if (!albums.data || !statuses.data) {
     return <div className="text-sm text-muted-foreground">Loading...</div>;
   }
+
+  // Map albumId -> OG community winner song (may be undefined while loading).
+  const ogWinnerByAlbum = new Map<number, string | null>(
+    (og.data?.albumWinners ?? []).map(w => [w.albumId, w.winner]),
+  );
 
   const items = albums.data.map(a => ({
     album: a,
@@ -49,9 +55,19 @@ export default function Results() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                   </div>
                   {status?.winningSong && (
-                    <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-1.5">
-                      <Trophy className="h-4 w-4 text-primary shrink-0" />
-                      <span className="text-sm font-semibold truncate">{status.winningSong}</span>
+                    <div className="mt-3 pt-3 border-t border-border/60 space-y-1.5">
+                      <div className="flex items-center gap-1.5" data-testid={`family-winner-${album.id}`}>
+                        <Trophy className="h-4 w-4 text-primary shrink-0" />
+                        <span className="text-sm font-semibold truncate">{status.winningSong}</span>
+                        <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Family</span>
+                      </div>
+                      {ogWinnerByAlbum.get(album.id) && (
+                        <div className="flex items-center gap-1.5" data-testid={`og-winner-${album.id}`}>
+                          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm truncate">{ogWinnerByAlbum.get(album.id)}</span>
+                          <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">OG</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>

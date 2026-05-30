@@ -15,7 +15,10 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import seedAlbums from "./seed-albums";
 import { sendMagicLink, mailConfigured } from "./email";
-import { buildRoundOne, derivePersonalBracket, computeStandings, resolveSeedOrder } from "./community-bracket";
+import {
+  buildRoundOne, derivePersonalBracket, computeStandings, resolveSeedOrder,
+  computeOGLeaderboard, computeOGPairAgreement, computeOGTopPairs, type OGAlbumInput,
+} from "./community-bracket";
 
 // Public base URL used to build magic links. Falls back to the request origin.
 const APP_BASE_URL = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
@@ -977,6 +980,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
+  });
+
+  // ========================================================================
+  // OG PARROTHEAD MADNESS: public leaderboard
+  // ------------------------------------------------------------------------
+  // One read endpoint powering the OG view of the Leaderboard page. Returns
+  // the member roster (id + display name only), per-member computed metrics
+  // (champion accuracy, consensus score, round-1 agreement, per-album detail),
+  // each album's community winner, and every member's per-album favorite song.
+  // Public (no auth) since the family leaderboard is public too.
+  // ========================================================================
+
+  // Helper: assemble the per-album community inputs once (shared by the two
+  // OG leaderboard endpoints below).
+  async function buildOGAlbumInputs(): Promise<OGAlbumInput[]> {
+    const albumList = await storage.listAlbums();
+    const allPicks = await storage.listAllCommunityPicks();
+    const picksByAlbum = new Map<number, typeof allPicks>();
+    for (const p of allPicks) {
+      const arr = picksByAlbum.get(p.albumId) ?? [];
+      arr.push(p);
+      picksByAlbum.set(p.albumId, arr);
+    }
+    return albumList.map(a => ({
+      albumId: a.id,
+      seedOrderJson: a.seedOrder,
+      tracks: JSON.parse(a.tracks) as string[],
+      picks: picksByAlbum.get(a.id) ?? [],
+    }));
+  }
+
+  app.get("/api/community/leaderboard", async (_req, res) => {
+    const members = (await storage.listMembers()).filter(m => !m.blocked);
+    const memberIds = members.map(m => m.id);
+    const albumInputs = await buildOGAlbumInputs();
+
+    const { perMember, albumWinners } = computeOGLeaderboard(memberIds, albumInputs);
+    // Real pairwise round-1 agreement (round 1 is the only fully-shared round).
+    const topPairs = computeOGTopPairs(memberIds, albumInputs, 10);
+
+    // Per-member favorite song per album.
+    const allFavs = await storage.listAllCommunityFavorites();
+    const favorites = allFavs.map(f => ({
+      memberId: f.memberId,
+      albumId: f.albumId,
+      songTitle: f.songTitle,
+    }));
+
+    res.json({
+      members: members.map(m => ({ id: m.id, displayName: m.displayName })),
+      perMember,
+      albumWinners,
+      topPairs,
+      favorites,
+    });
+  });
+
+  // Pairwise agreement between two OG members (the leaderboard's pair dropdown).
+  app.get("/api/community/pair-agreement", async (req, res) => {
+    const a = Number(req.query.a);
+    const b = Number(req.query.b);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) {
+      return res.status(400).json({ error: "Provide two distinct member ids (a, b)." });
+    }
+    const albumInputs = await buildOGAlbumInputs();
+    const result = computeOGPairAgreement(a, b, albumInputs);
+    res.json(result);
   });
 
   // ========================================================================

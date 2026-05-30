@@ -41,7 +41,7 @@ export function AlbumArena({ album }: { album: Album }) {
           <Home className="h-4 w-4" /> Family
         </TabsTrigger>
         <TabsTrigger value="community" data-testid="tab-community" className="gap-1.5">
-          <Users className="h-4 w-4" /> Community
+          <Users className="h-4 w-4" /> <span className="truncate">OG Parrothead Madness</span>
         </TabsTrigger>
       </TabsList>
 

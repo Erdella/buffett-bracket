@@ -406,3 +406,396 @@ export function computeStandings(
 
   return { totalRounds, ranked, winner, voterCount: voters.size };
 }
+
+// ============================================================================
+// OG PARROTHEAD MADNESS LEADERBOARD ENGINE
+// ----------------------------------------------------------------------------
+// The community ("OG Parrothead Madness") model gives every member their OWN
+// personal bracket that diverges after round 1, so the family leaderboard's
+// "did your vote match the single match winner" logic doesn't apply. These
+// helpers compute metrics that DO make sense for divergent brackets:
+//
+//   * Champion Accuracy  - per album, did the member's crowned champion equal
+//                          the community (weighted-points) winner? Reported as
+//                          a rate across albums the member completed.
+//   * Consensus Score    - how strongly a member backed the songs the crowd
+//                          backed. For each pick, the song's *share* of the
+//                          album's total weighted points is multiplied by the
+//                          pick's round weight and summed. Per album the raw
+//                          score is normalized against the best-scoring member
+//                          (0..1), then averaged across the member's albums, so
+//                          it reads as "how close to the most consensus-aligned
+//                          player were you."
+//   * Round-1 Agreement  - round 1 / prelims is the ONE round every member
+//                          shares identical matchups, so we can fairly compute
+//                          the community plurality pick per round-1 matchup and
+//                          measure each member's agreement with the crowd.
+// ============================================================================
+
+export interface OGMemberAlbumStat {
+  albumId: number;
+  // The member's crowned champion on their personal bracket (null if unfinished).
+  champion: string | null;
+  // The community winner for this album (null if undecided / no picks).
+  communityWinner: string | null;
+  // True when champion is set AND equals the community winner.
+  championCorrect: boolean;
+  // True when the member finished a bracket for this album (has a champion).
+  completed: boolean;
+  // Raw consensus points this member earned on this album.
+  rawConsensus: number;
+  // Best raw consensus any member earned on this album (the normalizer).
+  bestConsensus: number;
+  // rawConsensus / bestConsensus, 0..1 (0 when bestConsensus is 0).
+  consensusPct: number;
+  // Round-1 matchups: how many the member's pick matched the community plurality.
+  r1Agree: number;
+  r1Total: number;
+}
+
+export interface OGMemberStat {
+  memberId: number;
+  // Champion accuracy across albums the member completed.
+  albumsCompleted: number;
+  championsCorrect: number;
+  championAccuracy: number; // championsCorrect / albumsCompleted (0 when none)
+  // Consensus score: average of per-album consensusPct across albums the member
+  // made any pick on. 0..1.
+  consensusScore: number;
+  albumsPlayed: number; // albums the member made at least one pick on
+  // Round-1 agreement aggregated across all albums.
+  r1Agree: number;
+  r1Total: number;
+  r1Agreement: number; // r1Agree / r1Total (0 when none)
+  // Per-album detail (for the Album Accuracy dropdown).
+  perAlbum: OGMemberAlbumStat[];
+}
+
+export interface OGAlbumWinner {
+  albumId: number;
+  winner: string | null;
+  voterCount: number;
+  totalRounds: number;
+}
+
+/**
+ * One album's worth of community input needed to compute the leaderboard.
+ * The route assembles these from storage (seed order + tracks + all picks).
+ */
+export interface OGAlbumInput {
+  albumId: number;
+  seedOrderJson: string | null | undefined;
+  tracks: string[];
+  picks: CommunityBracketPick[]; // ALL members' picks for this album
+}
+
+/**
+ * Compute the full OG leaderboard from per-album inputs and the member list.
+ * Pure function — all data is passed in so it can be unit-tested.
+ */
+export function computeOGLeaderboard(
+  memberIds: number[],
+  albumInputs: OGAlbumInput[],
+): { perMember: OGMemberStat[]; albumWinners: OGAlbumWinner[] } {
+  // Accumulators keyed by memberId.
+  const acc = new Map<number, OGMemberStat>();
+  for (const id of memberIds) {
+    acc.set(id, {
+      memberId: id,
+      albumsCompleted: 0,
+      championsCorrect: 0,
+      championAccuracy: 0,
+      consensusScore: 0,
+      albumsPlayed: 0,
+      r1Agree: 0,
+      r1Total: 0,
+      r1Agreement: 0,
+      perAlbum: [],
+    });
+  }
+  // Temp store of per-album consensusPct per member to average at the end.
+  const consensusPctByMember = new Map<number, number[]>();
+  const albumWinners: OGAlbumWinner[] = [];
+
+  for (const input of albumInputs) {
+    const seeded = buildSeededBracket(
+      resolveSeedOrder(input.seedOrderJson, input.tracks),
+    );
+    const totalRounds = seeded.totalRounds;
+    const standings = computeStandings(totalRounds, input.picks);
+    const communityWinner = standings.winner;
+    albumWinners.push({
+      albumId: input.albumId,
+      winner: communityWinner,
+      voterCount: standings.voterCount,
+      totalRounds,
+    });
+
+    // song -> total weighted points (consensus strength) for this album.
+    const songPoints = new Map<string, number>();
+    for (const row of standings.ranked) songPoints.set(row.songTitle, row.points);
+    const totalPoints = standings.ranked.reduce((s, r) => s + r.points, 0);
+
+    // Group this album's picks by member.
+    const picksByMember = new Map<number, CommunityBracketPick[]>();
+    for (const p of input.picks) {
+      const arr = picksByMember.get(p.memberId) ?? [];
+      arr.push(p);
+      picksByMember.set(p.memberId, arr);
+    }
+
+    // Round-1 community plurality per matchIndex (round 1 is shared by all).
+    // votesByMatch: matchIndex -> song -> count
+    const r1Votes = new Map<number, Map<string, number>>();
+    for (const p of input.picks) {
+      if (p.round !== 1) continue;
+      const m = r1Votes.get(p.matchIndex) ?? new Map<string, number>();
+      m.set(p.songPicked, (m.get(p.songPicked) ?? 0) + 1);
+      r1Votes.set(p.matchIndex, m);
+    }
+    const r1Plurality = new Map<number, string | null>();
+    for (const [mi, counts] of Array.from(r1Votes.entries())) {
+      const sorted = Array.from(counts.entries()).sort((a, b) =>
+        b[1] - a[1] || a[0].localeCompare(b[0]),
+      );
+      // Clear plurality only if no tie at the top.
+      let win: string | null = null;
+      if (sorted.length === 1) win = sorted[0][0];
+      else if (sorted.length >= 2 && sorted[0][1] > sorted[1][1]) win = sorted[0][0];
+      r1Plurality.set(mi, win);
+    }
+
+    // Raw consensus per member for this album (first pass to find best).
+    const rawByMember = new Map<number, number>();
+    for (const [memberId, mPicks] of Array.from(picksByMember.entries())) {
+      let raw = 0;
+      for (const p of mPicks) {
+        const share = totalPoints > 0 ? (songPoints.get(p.songPicked) ?? 0) / totalPoints : 0;
+        raw += weightForRound(p.round, totalRounds) * share;
+      }
+      rawByMember.set(memberId, raw);
+    }
+    const bestConsensus = Math.max(0, ...Array.from(rawByMember.values()));
+
+    // Second pass: per-member album stats.
+    for (const memberId of memberIds) {
+      const mPicks = picksByMember.get(memberId);
+      if (!mPicks || mPicks.length === 0) continue; // didn't play this album
+      const stat = acc.get(memberId)!;
+      stat.albumsPlayed++;
+
+      const bracket = derivePersonalBracket(seeded, mPicks);
+      const champion = bracket.champion;
+      const completed = bracket.complete && champion != null;
+      const championCorrect = completed && communityWinner != null && champion === communityWinner;
+      if (completed) {
+        stat.albumsCompleted++;
+        if (championCorrect) stat.championsCorrect++;
+      }
+
+      const raw = rawByMember.get(memberId) ?? 0;
+      const consensusPct = bestConsensus > 0 ? raw / bestConsensus : 0;
+      const arr = consensusPctByMember.get(memberId) ?? [];
+      arr.push(consensusPct);
+      consensusPctByMember.set(memberId, arr);
+
+      // Round-1 agreement for this member on this album.
+      let r1Agree = 0;
+      let r1Total = 0;
+      for (const p of mPicks) {
+        if (p.round !== 1) continue;
+        const plur = r1Plurality.get(p.matchIndex);
+        if (plur == null) continue; // tie / no consensus -> not counted
+        r1Total++;
+        if (p.songPicked === plur) r1Agree++;
+      }
+      stat.r1Agree += r1Agree;
+      stat.r1Total += r1Total;
+
+      stat.perAlbum.push({
+        albumId: input.albumId,
+        champion,
+        communityWinner,
+        championCorrect,
+        completed,
+        rawConsensus: raw,
+        bestConsensus,
+        consensusPct,
+        r1Agree,
+        r1Total,
+      });
+    }
+  }
+
+  // Finalize aggregate rates.
+  for (const stat of Array.from(acc.values())) {
+    stat.championAccuracy = stat.albumsCompleted > 0 ? stat.championsCorrect / stat.albumsCompleted : 0;
+    const pcts = consensusPctByMember.get(stat.memberId) ?? [];
+    stat.consensusScore = pcts.length > 0 ? pcts.reduce((s, x) => s + x, 0) / pcts.length : 0;
+    stat.r1Agreement = stat.r1Total > 0 ? stat.r1Agree / stat.r1Total : 0;
+  }
+
+  return { perMember: Array.from(acc.values()), albumWinners };
+}
+
+// ----------------------------------------------------------------------------
+// Pairwise agreement between two OG members.
+// Members reliably share matchups only in round 1, so agreement is computed on
+// round-1 picks (identical pairings) plus a "same champion?" flag. We also
+// opportunistically count any LATER-round matchups where both members happened
+// to face the exact same {songA, songB} pairing AND both picked.
+// ----------------------------------------------------------------------------
+
+export interface OGPairAgreement {
+  shared: number; // matchups both faced (round-1 + coincidental later)
+  agreed: number; // of those, how many they picked the same song
+  pct: number;
+  sameChampion: boolean | null; // null when either hasn't crowned a champion
+  albumsBothCompleted: number;
+  sameChampionCount: number; // # albums where both crowned the same champion
+}
+
+/**
+ * Compute pairwise agreement between two members across all album inputs.
+ */
+export function computeOGPairAgreement(
+  memberA: number,
+  memberB: number,
+  albumInputs: OGAlbumInput[],
+): OGPairAgreement {
+  let shared = 0;
+  let agreed = 0;
+  let albumsBothCompleted = 0;
+  let sameChampionCount = 0;
+
+  for (const input of albumInputs) {
+    const seeded = buildSeededBracket(
+      resolveSeedOrder(input.seedOrderJson, input.tracks),
+    );
+    const aPicks = input.picks.filter(p => p.memberId === memberA);
+    const bPicks = input.picks.filter(p => p.memberId === memberB);
+    if (aPicks.length === 0 || bPicks.length === 0) continue;
+
+    const aBracket = derivePersonalBracket(seeded, aPicks);
+    const bBracket = derivePersonalBracket(seeded, bPicks);
+
+    // Build a lookup of each member's matchups keyed by a normalized pairing.
+    const pairKey = (sa: string | null, sb: string | null) =>
+      [sa ?? "", sb ?? ""].sort().join("\u0000");
+    const aByPair = new Map<string, string | null>();
+    for (const round of aBracket.rounds) {
+      for (const m of round) {
+        if (!m.songA || !m.songB) continue;
+        if (m.pick == null) continue;
+        aByPair.set(pairKey(m.songA, m.songB), m.pick);
+      }
+    }
+    for (const round of bBracket.rounds) {
+      for (const m of round) {
+        if (!m.songA || !m.songB) continue;
+        if (m.pick == null) continue;
+        const key = pairKey(m.songA, m.songB);
+        if (!aByPair.has(key)) continue;
+        shared++;
+        if (aByPair.get(key) === m.pick) agreed++;
+      }
+    }
+
+    // Same champion?
+    if (aBracket.complete && bBracket.complete && aBracket.champion && bBracket.champion) {
+      albumsBothCompleted++;
+      if (aBracket.champion === bBracket.champion) sameChampionCount++;
+    }
+  }
+
+  return {
+    shared,
+    agreed,
+    pct: shared > 0 ? agreed / shared : 0,
+    sameChampion: albumsBothCompleted > 0 ? sameChampionCount === albumsBothCompleted : null,
+    albumsBothCompleted,
+    sameChampionCount,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Top pairwise agreement across ALL member pairs (for the leaderboard's
+// "Voting Agreement" top-10 list). Round 1 / prelims is the ONLY round every
+// member shares identical matchups, so this is computed purely from round-1
+// picks: for each album, each matchIndex defines an identical pairing for all
+// members, and two members "agree" on that matchup when they picked the same
+// song. This is O(albums * matchups * membersPerMatchup) — cheap — and it is
+// the only fair, fully-shared signal, so we report it directly server-side
+// rather than a client-side heuristic.
+// ----------------------------------------------------------------------------
+
+export interface OGTopPair {
+  memberA: number;
+  memberB: number;
+  shared: number; // round-1 matchups both members picked
+  agreed: number; // of those, how many matched
+  pct: number;
+}
+
+export function computeOGTopPairs(
+  memberIds: number[],
+  albumInputs: OGAlbumInput[],
+  limit = 10,
+): OGTopPair[] {
+  // pairKey -> { shared, agreed }
+  const pairAcc = new Map<string, { agreed: number; shared: number }>();
+  const keyFor = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+
+  for (const input of albumInputs) {
+    // matchIndex -> [{ memberId, song }] for round-1 picks only.
+    const byMatch = new Map<number, { memberId: number; song: string }[]>();
+    for (const p of input.picks) {
+      if (p.round !== 1) continue;
+      const arr = byMatch.get(p.matchIndex) ?? [];
+      arr.push({ memberId: p.memberId, song: p.songPicked });
+      byMatch.set(p.matchIndex, arr);
+    }
+    for (const entries of Array.from(byMatch.values())) {
+      // Compare every unordered pair of members who picked this matchup.
+      for (let i = 0; i < entries.length; i++) {
+        for (let j = i + 1; j < entries.length; j++) {
+          const a = entries[i];
+          const b = entries[j];
+          const k = keyFor(a.memberId, b.memberId);
+          const cur = pairAcc.get(k) ?? { agreed: 0, shared: 0 };
+          cur.shared++;
+          if (a.song === b.song) cur.agreed++;
+          pairAcc.set(k, cur);
+        }
+      }
+    }
+  }
+
+  const validIds = new Set(memberIds);
+  const pairs: OGTopPair[] = [];
+  for (const [k, v] of Array.from(pairAcc.entries())) {
+    const [aStr, bStr] = k.split(":");
+    const memberA = Number(aStr);
+    const memberB = Number(bStr);
+    if (!validIds.has(memberA) || !validIds.has(memberB)) continue;
+    if (v.shared === 0) continue;
+    pairs.push({
+      memberA,
+      memberB,
+      shared: v.shared,
+      agreed: v.agreed,
+      pct: v.agreed / v.shared,
+    });
+  }
+
+  // Sort by agreement pct desc, then by shared count desc (more evidence), then
+  // by ids for stability.
+  pairs.sort(
+    (x, y) =>
+      y.pct - x.pct ||
+      y.shared - x.shared ||
+      x.memberA - y.memberA ||
+      x.memberB - y.memberB,
+  );
+  return pairs.slice(0, limit);
+}

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppHeader } from "@/components/app-header";
 import NotFound from "@/pages/not-found";
+import Home from "@/pages/home";
 import NowPlaying from "@/pages/now-playing";
 import Albums from "@/pages/albums";
 import AlbumDetail from "@/pages/album-detail";
@@ -18,7 +19,8 @@ import Verify from "@/pages/verify";
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/" component={NowPlaying} />
+      <Route path="/" component={Home} />
+      <Route path="/now-playing" component={NowPlaying} />
       <Route path="/albums" component={Albums} />
       <Route path="/albums/:id" component={AlbumDetail} />
       <Route path="/results" component={Results} />

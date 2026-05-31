@@ -10,7 +10,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const PUBLIC_NAV = [
-  { href: "/",            label: "Now Playing" },
+  { href: "/",            label: "Home" },
+  { href: "/now-playing", label: "Now Playing" },
   { href: "/albums",      label: "Albums" },
   { href: "/results",     label: "Results" },
   { href: "/leaderboard", label: "Leaderboard" },

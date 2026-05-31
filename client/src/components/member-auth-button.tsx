@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LogIn, LogOut, Mail, CheckCircle2, User, Pencil, Camera, Trash2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,16 @@ import { apiRequest, assetUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
+ * Custom event other components can dispatch to pop open the magic-link
+ * sign-in dialog (e.g. a "Join" CTA on the home page). The header's
+ * MemberAuthButton listens for it.
+ */
+export const MEMBER_SIGNIN_EVENT = "open-member-signin";
+export function openMemberSignIn() {
+  window.dispatchEvent(new CustomEvent(MEMBER_SIGNIN_EVENT));
+}
+
+/**
  * The community sign-in control shown in the header.
  * - Signed out: a "Sign in" button that opens the magic-link request dialog.
  * - Signed in:  a dropdown showing the member's name with a sign-out option.
@@ -41,6 +51,16 @@ export function MemberAuthButton() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
+
+  // Let other parts of the app (e.g. the home-page CTA) open the sign-in
+  // dialog. Ignored while a member is already signed in.
+  useEffect(() => {
+    const handler = () => {
+      if (!member) setOpen(true);
+    };
+    window.addEventListener(MEMBER_SIGNIN_EVENT, handler);
+    return () => window.removeEventListener(MEMBER_SIGNIN_EVENT, handler);
+  }, [member]);
 
   const requestMutation = useMutation({
     mutationFn: async () => {

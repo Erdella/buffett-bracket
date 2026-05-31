@@ -32,6 +32,28 @@ function nameIsPlaceholder(email: string, displayName: string): boolean {
   return displayName.trim() === email.split("@")[0];
 }
 
+// True when the given email belongs to one of the family players. Used to
+// decide whether a signed-in member can see the otherwise-hidden family
+// bracket and results. Case-insensitive, ignores blank player emails.
+async function isFamilyEmail(email: string): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (!e) return false;
+  const players = await storage.listPlayers();
+  return players.some(p => (p.email ?? "").trim().toLowerCase() === e);
+}
+
+// Server-side gate for family-only data. A request is "family" when it's the
+// admin, or a signed-in (non-blocked) member whose email matches a family
+// player. Used to hide the family bracket lifecycle (status/winners) and the
+// per-player favorites from outsiders at the API level, not just in the UI.
+async function requestIsFamily(req: Request): Promise<boolean> {
+  if (req.session.isAdmin) return true;
+  if (!req.session.memberId) return false;
+  const m = await storage.getMember(req.session.memberId);
+  if (!m || m.blocked) return false;
+  return isFamilyEmail(m.email);
+}
+
 // Uploaded player avatars live next to data.db (cwd) so they share the
 // Docker volume mount and survive image upgrades.
 const UPLOAD_DIR = path.resolve("uploads");
@@ -147,16 +169,20 @@ async function ensureSchemaAndSeed() {
     name TEXT NOT NULL,
     color TEXT NOT NULL DEFAULT '#01696F',
     order_index INTEGER NOT NULL DEFAULT 0,
-    photo_url TEXT
+    photo_url TEXT,
+    email TEXT
   )`);
-  // Add photo_url column to existing player tables (idempotent).
+  // Add photo_url + email columns to existing player tables (idempotent).
   try {
     const cols = db.all(sql`PRAGMA table_info(players)`) as Array<{ name: string }>;
     if (!cols.some(c => c.name === "photo_url")) {
       db.run(sql`ALTER TABLE players ADD COLUMN photo_url TEXT`);
     }
+    if (!cols.some(c => c.name === "email")) {
+      db.run(sql`ALTER TABLE players ADD COLUMN email TEXT`);
+    }
   } catch (e) {
-    console.warn("Could not check/add photo_url column:", e);
+    console.warn("Could not check/add player columns:", e);
   }
   db.run(sql`CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -323,8 +349,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         req.session.memberId = undefined;
       }
     }
+    // A visitor is "family" if they're the admin, or a signed-in member whose
+    // email matches one of the family players. Family-only content (the family
+    // bracket, winners, and family leaderboard) is hidden from everyone else.
+    const isFamily = await requestIsFamily(req);
     res.json({
       isAdmin: !!req.session.isAdmin,
+      isFamily,
       authConfigured: !!ADMIN_PASSWORD_HASH,
       member,
       mailConfigured,
@@ -397,8 +428,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // --- players ---
-  app.get("/api/players", async (_req, res) => {
-    res.json(await storage.listPlayers());
+  app.get("/api/players", async (req, res) => {
+    const players = await storage.listPlayers();
+    // Family player emails are private linking info — only expose them to the
+    // admin (who manages them). Everyone else gets the public fields.
+    if (req.session.isAdmin) {
+      res.json(players);
+    } else {
+      res.json(players.map(({ email, ...rest }) => rest));
+    }
   });
   app.post("/api/players", async (req, res) => {
     try {
@@ -480,11 +518,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
-  // --- album status ---
-  app.get("/api/album-status", async (_req, res) => {
+  // --- album status (FAMILY-ONLY: bracket lifecycle + winners) ---
+  // Outsiders get an empty list / null so the family contest's progress and
+  // crowned songs stay hidden even from direct API access.
+  app.get("/api/album-status", async (req, res) => {
+    if (!(await requestIsFamily(req))) return res.json([]);
     res.json(await storage.listAlbumStatuses());
   });
   app.get("/api/albums/:id/status", async (req, res) => {
+    if (!(await requestIsFamily(req))) return res.json(null);
     const id = Number(req.params.id);
     res.json(await storage.getAlbumStatus(id) ?? null);
   });
@@ -502,11 +544,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
 
-  // --- album results (per-player favorite) ---
+  // --- album results (FAMILY-ONLY: per-player favorite) ---
   app.get("/api/albums/:id/results", async (req, res) => {
+    if (!(await requestIsFamily(req))) return res.json([]);
     res.json(await storage.listAlbumResults(Number(req.params.id)));
   });
-  app.get("/api/results", async (_req, res) => {
+  app.get("/api/results", async (req, res) => {
+    if (!(await requestIsFamily(req))) return res.json([]);
     res.json(await storage.listAllResults());
   });
   app.post("/api/albums/:id/results", async (req, res) => {
@@ -526,6 +570,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // (typically generated by AI) for each round, marks winners, then adds the
   // next round when ready. No auto-generation, no auto-propagation.
   app.get("/api/albums/:id/bracket", async (req, res) => {
+    // FAMILY-ONLY: the closed family bracket matchups. Outsiders see nothing.
+    if (!(await requestIsFamily(req))) return res.json([]);
     res.json(await storage.listBracketMatches(Number(req.params.id)));
   });
 
@@ -574,13 +620,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- votes ---
   // List all votes across all albums (used for stats), bundled with all bracket
   // matches so the client can correlate vote → match → winner.
-  app.get("/api/votes", async (_req, res) => {
+  app.get("/api/votes", async (req, res) => {
+    // FAMILY-ONLY: the 5 family voters' bracket votes. Hidden from outsiders.
+    if (!(await requestIsFamily(req))) return res.json({ matches: [], votes: [] });
     const allVotes = await storage.listAllVotes();
     const allMatches = db.select().from(bracketMatches).all();
     res.json({ matches: allMatches, votes: allVotes });
   });
   // List votes for one album's matches.
   app.get("/api/albums/:id/votes", async (req, res) => {
+    // FAMILY-ONLY: family voter votes for one album. Hidden from outsiders.
+    if (!(await requestIsFamily(req))) return res.json([]);
     res.json(await storage.listVotesForAlbum(Number(req.params.id)));
   });
   // Cast or update a vote.

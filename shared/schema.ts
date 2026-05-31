@@ -31,6 +31,10 @@ export const players = sqliteTable("players", {
   orderIndex: integer("order_index").notNull().default(0),
   // Optional uploaded avatar. URL path served by the app (e.g. /uploads/p3-...png).
   photoUrl: text("photo_url"),
+  // Optional email that links this family player to a community member account.
+  // When a signed-in member's email matches a player's email, that member is
+  // treated as "family" and can see the otherwise-hidden family bracket/results.
+  email: text("email"),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });

@@ -3,6 +3,9 @@ import type { MemberInfo } from "@/lib/types";
 
 export interface AuthState {
   isAdmin: boolean;
+  // True when the visitor is the admin, or a signed-in member whose email is
+  // linked to a family player. Family-only content is hidden from everyone else.
+  isFamily: boolean;
   authConfigured: boolean;
   member: MemberInfo | null;
   mailConfigured: boolean;
@@ -27,6 +30,7 @@ export function useAuth(): AuthState & { isLoading: boolean } {
   });
   return {
     isAdmin: q.data?.isAdmin ?? false,
+    isFamily: q.data?.isFamily ?? false,
     authConfigured: q.data?.authConfigured ?? false,
     member: q.data?.member ?? null,
     mailConfigured: q.data?.mailConfigured ?? false,

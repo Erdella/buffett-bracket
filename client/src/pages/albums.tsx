@@ -8,11 +8,16 @@ import { Trophy, Hourglass, Music, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { AlbumCover } from "@/components/album-cover";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Albums() {
   const [q, setQ] = useState("");
+  const { isFamily } = useAuth();
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
-  const statuses = useQuery<AlbumStatus[]>({ queryKey: ["/api/album-status"] });
+  // Album status (Done / in-progress / family winner) reflects the FAMILY
+  // bracket, so it's only fetched and shown to family. Outsiders still see the
+  // "Now playing" highlight, which is public.
+  const statuses = useQuery<AlbumStatus[]>({ queryKey: ["/api/album-status"], enabled: isFamily });
   const settings = useQuery<Settings>({ queryKey: ["/api/settings"] });
 
   const filtered = useMemo(() => {
@@ -44,10 +49,10 @@ export default function Albums() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {filtered.map(album => {
-          const st = statusFor(album.id);
+          const st = isFamily ? statusFor(album.id) : undefined;
           const isCurrent = settings.data?.currentAlbumId === album.id;
-          const completed = st?.status === "completed";
-          const inProgress = st?.status === "in_progress";
+          const completed = !!st && st.status === "completed";
+          const inProgress = !!st && st.status === "in_progress";
           return (
             <Link
               key={album.id}
@@ -79,7 +84,7 @@ export default function Albums() {
                       <AlbumCover album={album} sizeClass="h-16 w-16" />
                     </div>
                   </div>
-                  {completed && st?.winningSong && (
+                  {isFamily && completed && st?.winningSong && (
                     <div className="mt-3 pt-3 border-t border-border/60">
                       <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Winner</div>
                       <div className="text-sm font-semibold flex items-center gap-1.5 mt-0.5">

@@ -16,6 +16,9 @@ export interface Player {
   color: string;
   orderIndex: number;
   photoUrl: string | null;
+  // Only present in admin responses: the email that links this family player
+  // to a community member account (public responses omit it).
+  email?: string | null;
 }
 
 export interface Settings {

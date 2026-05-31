@@ -6,18 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlbumCover } from "@/components/album-cover";
 import { AlbumArena } from "@/components/album-arena";
+import { useAuth } from "@/hooks/use-auth";
 import { Music, ArrowRight, Sparkles } from "lucide-react";
 
 export default function NowPlaying() {
+  const { isFamily } = useAuth();
   const settings = useQuery<Settings>({ queryKey: ["/api/settings"] });
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
 
   const currentId = settings.data?.currentAlbumId ?? null;
   const currentAlbum = albums.data?.find(a => a.id === currentId) ?? null;
 
+  // Album lifecycle status is family-only (it carries the family winner). Only
+  // fetch it for family/admin so the "Completed" badge never shows to outsiders.
   const status = useQuery<AlbumStatus | null>({
     queryKey: ["/api/albums", currentId, "status"],
-    enabled: !!currentId,
+    enabled: !!currentId && isFamily,
   });
 
   if (!settings.data) return <SkeletonPage />;
@@ -34,19 +38,23 @@ export default function NowPlaying() {
             <div>
               <div className="font-display text-xl font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>No album in play yet</div>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Pick the first album from the admin panel, then paste this round's matchups to start the family bracket.
+                {isFamily
+                  ? "Pick the first album from the admin panel, then paste this round's matchups to start the family bracket."
+                  : "Check back soon — the next album showdown will kick off here."}
               </p>
             </div>
-            <Button asChild data-testid="button-go-admin">
-              <Link href="/admin">Open Admin <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
-            </Button>
+            {isFamily && (
+              <Button asChild data-testid="button-go-admin">
+                <Link href="/admin">Open Admin <ArrowRight className="h-4 w-4 ml-1.5" /></Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const isComplete = status.data?.status === "completed";
+  const isComplete = isFamily && status.data?.status === "completed";
 
   return (
     <div className="space-y-6 sm:space-y-8">

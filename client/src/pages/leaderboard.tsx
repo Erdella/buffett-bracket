@@ -14,6 +14,7 @@ import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { AlbumCover } from "@/components/album-cover";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 interface VotesPayload {
   matches: BracketMatch[];
@@ -23,48 +24,54 @@ interface VotesPayload {
 type View = "family" | "og";
 
 export default function Leaderboard() {
+  const { isFamily } = useAuth();
+  // Outsiders only ever see the OG leaderboard — no family toggle, no family
+  // default. Family/admin default to the family view but can toggle to OG.
   const [view, setView] = useState<View>("family");
+  const effectiveView: View = isFamily ? view : "og";
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Leaderboard</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {view === "family" ? "Whose taste matches the family?" : "How the OG Parrothead Madness crowd stacks up."}
+          {effectiveView === "family" ? "Whose taste matches the family?" : "How the OG Parrothead Madness crowd stacks up."}
         </p>
       </div>
 
-      {/* View toggle */}
-      <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1" role="tablist" aria-label="Leaderboard view">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "family"}
-          data-testid="toggle-family"
-          onClick={() => setView("family")}
-          className={cn(
-            "px-4 py-1.5 text-sm font-semibold rounded-md transition-colors",
-            view === "family" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover-elevate",
-          )}
-        >
-          Family
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "og"}
-          data-testid="toggle-og"
-          onClick={() => setView("og")}
-          className={cn(
-            "px-4 py-1.5 text-sm font-semibold rounded-md transition-colors",
-            view === "og" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover-elevate",
-          )}
-        >
-          OG Parrothead Madness
-        </button>
-      </div>
+      {/* View toggle — family/admin only. */}
+      {isFamily && (
+        <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1" role="tablist" aria-label="Leaderboard view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "family"}
+            data-testid="toggle-family"
+            onClick={() => setView("family")}
+            className={cn(
+              "px-4 py-1.5 text-sm font-semibold rounded-md transition-colors",
+              view === "family" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover-elevate",
+            )}
+          >
+            Family
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "og"}
+            data-testid="toggle-og"
+            onClick={() => setView("og")}
+            className={cn(
+              "px-4 py-1.5 text-sm font-semibold rounded-md transition-colors",
+              view === "og" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover-elevate",
+            )}
+          >
+            OG Parrothead Madness
+          </button>
+        </div>
+      )}
 
-      {view === "family" ? <FamilyView /> : <OGView />}
+      {effectiveView === "family" ? <FamilyView /> : <OGView />}
     </div>
   );
 }

@@ -20,9 +20,11 @@ export default function AlbumDetail() {
   const album = useQuery<Album>({ queryKey: ["/api/albums", id], enabled: !!id });
   const status = useQuery<AlbumStatus | null>({ queryKey: ["/api/albums", id, "status"], enabled: !!id });
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
-  const players = useQuery<Player[]>({ queryKey: ["/api/players"] });
-  const results = useQuery<AlbumResult[]>({ queryKey: ["/api/albums", id, "results"], enabled: !!id });
   const auth = useAuth();
+  // Per-player family favorites are family-only data; don't even fetch them
+  // for outsiders so nothing family-related reaches the client.
+  const players = useQuery<Player[]>({ queryKey: ["/api/players"], enabled: auth.isFamily });
+  const results = useQuery<AlbumResult[]>({ queryKey: ["/api/albums", id, "results"], enabled: !!id && auth.isFamily });
 
   if (!album.data) return <div className="text-sm text-muted-foreground">Loading...</div>;
   const a = album.data;
@@ -88,11 +90,13 @@ export default function AlbumDetail() {
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{a.tracks.length} tracks</Badge>
-                {isComplete && <Badge className="bg-primary text-primary-foreground"><Trophy className="h-3 w-3 mr-1" /> Completed</Badge>}
-                {st?.status === "in_progress" && <Badge variant="secondary">In progress</Badge>}
-                {!st && <Badge variant="outline" className="text-muted-foreground">Not started</Badge>}
+                {/* Album status badges track the FAMILY bracket lifecycle, so
+                    they're only shown to family. Outsiders just see track count. */}
+                {auth.isFamily && isComplete && <Badge className="bg-primary text-primary-foreground"><Trophy className="h-3 w-3 mr-1" /> Completed</Badge>}
+                {auth.isFamily && st?.status === "in_progress" && <Badge variant="secondary">In progress</Badge>}
+                {auth.isFamily && !st && <Badge variant="outline" className="text-muted-foreground">Not started</Badge>}
               </div>
-              {isComplete && st?.winningSong && (
+              {auth.isFamily && isComplete && st?.winningSong && (
                 <div className="mt-5 p-4 rounded-lg bg-primary/10 border border-primary/30">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Family winner</div>
                   <div className="font-display text-xl font-bold mt-0.5" style={{ fontFamily: "var(--font-display)" }}>{st.winningSong}</div>
@@ -119,11 +123,14 @@ export default function AlbumDetail() {
               // Find every player whose personal favorite matches this track—
               // we surface their avatars on the right of the row so it's easy
               // to see at a glance who loves what.
-              const fans = (results.data ?? [])
-                .filter(r => r.songTitle === t)
-                .map(r => (players.data ?? []).find(p => p.id === r.playerId))
-                .filter((p): p is Player => !!p);
-              const isWinner = st?.winningSong === t;
+              const fans = auth.isFamily
+                ? (results.data ?? [])
+                    .filter(r => r.songTitle === t)
+                    .map(r => (players.data ?? []).find(p => p.id === r.playerId))
+                    .filter((p): p is Player => !!p)
+                : [];
+              // The trophy marks the FAMILY winner — only family sees it.
+              const isWinner = auth.isFamily && st?.winningSong === t;
               return (
                 <div key={i} className="px-4 py-2.5 flex items-center gap-3 text-sm">
                   <span className="text-xs text-muted-foreground font-mono w-6 shrink-0">{String(i + 1).padStart(2, "0")}</span>

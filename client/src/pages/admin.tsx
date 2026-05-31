@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Plus, Save, Lock, Camera, X } from "lucide-react";
+import { Trash2, Plus, Save, Lock, Camera, X, Mail } from "lucide-react";
 import { useRef, useState } from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { AdminCommunity } from "@/components/admin-community";
@@ -174,10 +174,14 @@ function PlayerRow({
 }) {
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color);
+  const [email, setEmail] = useState(player.email ?? "");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const dirty = name !== player.name || color !== player.color;
+  const dirty =
+    name !== player.name ||
+    color !== player.color ||
+    email.trim() !== (player.email ?? "");
 
   // Upload uses multipart form-data, so we hit the endpoint directly
   // (apiRequest only handles JSON bodies).
@@ -212,7 +216,8 @@ function PlayerRow({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-card-border bg-card" data-testid={`row-player-${player.id}`}>
+    <div className="p-2 rounded-lg border border-card-border bg-card space-y-2" data-testid={`row-player-${player.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
       <div className="relative shrink-0 group">
         <PlayerAvatar
           player={{ ...player, name, color }}
@@ -262,13 +267,25 @@ function PlayerRow({
       />
       <ColorSwatches value={color} onChange={setColor} compact />
       {dirty && (
-        <Button size="sm" variant="secondary" onClick={() => onSave({ name, color })} data-testid={`button-save-player-${player.id}`}>
+        <Button size="sm" variant="secondary" onClick={() => onSave({ name, color, email: email.trim() || null })} data-testid={`button-save-player-${player.id}`}>
           <Save className="h-3.5 w-3.5 mr-1" /> Save
         </Button>
       )}
       <Button size="icon" variant="ghost" onClick={onDelete} aria-label="Delete" data-testid={`button-delete-player-${player.id}`}>
         <Trash2 className="h-4 w-4 text-muted-foreground" />
       </Button>
+      </div>
+      <div className="flex items-center gap-2 pl-12">
+        <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="Link email (so this person sees family results)"
+          className="flex-1 h-8 text-sm"
+          data-testid={`input-player-email-${player.id}`}
+        />
+      </div>
     </div>
   );
 }

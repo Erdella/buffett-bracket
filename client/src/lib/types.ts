@@ -97,7 +97,11 @@ export interface CommunityAlbumData {
 
 export interface CommunityFavoritesData {
   total: number;
-  ranked: { songTitle: string; count: number }[];
+  ranked: {
+    songTitle: string;
+    count: number;
+    voters: { id: number; displayName: string; photoUrl?: string | null }[];
+  }[];
   myFavorite: string | null;
 }
 

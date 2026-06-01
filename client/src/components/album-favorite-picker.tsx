@@ -7,6 +7,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Heart, Star, Users, Music } from "lucide-react";
+import { AvatarStack } from "@/components/avatar-stack";
 
 /**
  * Lets a logged-in community member pick their single favorite song from an
@@ -49,7 +50,8 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
   }
 
   const { ranked, total, myFavorite } = favorites.data;
-  const countFor = (song: string) => ranked.find(r => r.songTitle === song)?.count ?? 0;
+  const rankFor = (song: string) => ranked.find(r => r.songTitle === song);
+  const countFor = (song: string) => rankFor(song)?.count ?? 0;
   const topCount = ranked[0]?.count ?? 0;
 
   return (
@@ -84,20 +86,30 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
       <Card className="border-card-border">
         <CardContent className="p-0 divide-y divide-border/60">
           {album.tracks.map((track, i) => {
-            const count = countFor(track);
+            const rank = rankFor(track);
+            const count = rank?.count ?? 0;
+            const voters = rank?.voters ?? [];
             const isMine = myFavorite === track;
             const isTop = count > 0 && count === topCount;
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            const pick = () => { if (member && !favMutation.isPending) favMutation.mutate(track); };
             return (
-              <button
+              <div
                 key={i}
-                type="button"
-                disabled={!member || favMutation.isPending}
-                onClick={() => member && favMutation.mutate(track)}
+                role="button"
+                tabIndex={member ? 0 : -1}
+                onClick={pick}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                    e.preventDefault();
+                    pick();
+                  }
+                }}
                 aria-pressed={isMine}
+                aria-disabled={!member || favMutation.isPending}
                 data-testid={`favorite-track-${album.id}-${i}`}
                 className={cn(
-                  "relative w-full text-left px-4 py-3 flex items-center gap-3 text-sm overflow-hidden transition-colors",
+                  "relative w-full text-left px-4 py-3 flex flex-col gap-2 text-sm overflow-hidden transition-colors",
                   isMine && "bg-primary/10",
                   member ? "hover-elevate active-elevate cursor-pointer" : "cursor-default",
                 )}
@@ -110,28 +122,41 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
                     style={{ width: `${pct}%` }}
                   />
                 )}
-                <span className="relative text-xs text-muted-foreground font-mono w-6 shrink-0">{String(i + 1).padStart(2, "0")}</span>
-                <Heart
-                  className={cn(
-                    "h-4 w-4 shrink-0 relative",
-                    isMine ? "fill-primary text-primary" : "text-muted-foreground/40",
+                <div className="relative flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground font-mono w-6 shrink-0">{String(i + 1).padStart(2, "0")}</span>
+                  <Heart
+                    className={cn(
+                      "h-4 w-4 shrink-0",
+                      isMine ? "fill-primary text-primary" : "text-muted-foreground/40",
+                    )}
+                  />
+                  <span className="flex-1 truncate min-w-0">{track}</span>
+                  {isTop && (
+                    <Badge className="bg-primary/15 text-primary border-0 text-[10px] gap-1 shrink-0">
+                      <Star className="h-3 w-3" /> Crowd favorite
+                    </Badge>
                   )}
-                />
-                <span className="relative flex-1 truncate">{track}</span>
-                {isTop && (
-                  <Badge className="relative bg-primary/15 text-primary border-0 text-[10px] gap-1 shrink-0">
-                    <Star className="h-3 w-3" /> Crowd favorite
-                  </Badge>
+                  {count > 0 && (
+                    <span
+                      className="text-xs tabular-nums text-muted-foreground shrink-0 w-5 text-right"
+                      data-testid={`favorite-count-${album.id}-${i}`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </div>
+                {/* Voter avatars on their own line so a popular song can show a
+                    full stack without crowding the title row. */}
+                {voters.length > 0 && (
+                  <div className="relative flex items-center pl-9">
+                    <AvatarStack
+                      voters={voters}
+                      max={10}
+                      testId={`favorite-voters-${album.id}-${i}`}
+                    />
+                  </div>
                 )}
-                {count > 0 && (
-                  <span
-                    className="relative text-xs tabular-nums text-muted-foreground shrink-0"
-                    data-testid={`favorite-count-${album.id}-${i}`}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
+              </div>
             );
           })}
         </CardContent>

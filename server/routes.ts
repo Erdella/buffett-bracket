@@ -55,6 +55,22 @@ async function requestIsFamily(req: Request): Promise<boolean> {
   return isFamilyEmail(m.email);
 }
 
+// Resolve the effective avatar for an OG member: their own uploaded photo wins,
+// otherwise fall back to the admin-panel photo of the family player they're
+// linked to (same email, case-insensitive). Returns null when neither exists
+// (the client then renders colored initials). `players` is passed in so callers
+// that resolve many members at once only fetch the player list once.
+function memberPhotoUrl(
+  member: { email: string; photoUrl?: string | null },
+  players: { email?: string | null; photoUrl?: string | null }[],
+): string | null {
+  if (member.photoUrl) return member.photoUrl;
+  const e = (member.email ?? "").trim().toLowerCase();
+  if (!e) return null;
+  const linked = players.find(p => (p.email ?? "").trim().toLowerCase() === e);
+  return linked?.photoUrl ?? null;
+}
+
 // Uploaded player avatars live next to data.db (cwd) so they share the
 // Docker volume mount and survive image upgrades.
 const UPLOAD_DIR = path.resolve("uploads");
@@ -344,7 +360,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (req.session.memberId) {
       const m = await storage.getMember(req.session.memberId);
       if (m && !m.blocked) {
-        member = { id: m.id, displayName: m.displayName, email: m.email, photoUrl: m.photoUrl ?? null, needsName: nameIsPlaceholder(m.email, m.displayName) };
+        const players = await storage.listPlayers();
+        member = { id: m.id, displayName: m.displayName, email: m.email, photoUrl: memberPhotoUrl(m, players), needsName: nameIsPlaceholder(m.email, m.displayName) };
       } else {
         // Member was deleted or blocked since login — clear stale session.
         req.session.memberId = undefined;
@@ -720,9 +737,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (member.blocked) return res.status(403).json({ error: "This account has been blocked." });
 
       req.session.memberId = member.id;
+      const players = await storage.listPlayers();
       req.session.save(err => {
         if (err) return res.status(500).json({ error: "Could not start your session." });
-        res.json({ member: { id: member.id, displayName: member.displayName, email: member.email, photoUrl: member.photoUrl ?? null, needsName: nameIsPlaceholder(member.email, member.displayName) } });
+        res.json({ member: { id: member.id, displayName: member.displayName, email: member.email, photoUrl: memberPhotoUrl(member, players), needsName: nameIsPlaceholder(member.email, member.displayName) } });
       });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -905,16 +923,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/albums/:id/community-favorites", async (req, res) => {
     const albumId = Number(req.params.id);
     const favs = await storage.listCommunityFavorites(albumId);
+
+    // Resolve each favorite to a non-blocked member with their effective avatar
+    // (own photo → linked family-player photo → initials). Build a lookup once.
+    const allMembers = await storage.listMembers();
+    const players = await storage.listPlayers();
+    const memberById = new Map(allMembers.map(m => [m.id, m]));
+
     const counts: Record<string, number> = {};
-    for (const f of favs) counts[f.songTitle] = (counts[f.songTitle] ?? 0) + 1;
+    const votersBySong: Record<string, { id: number; displayName: string; photoUrl: string | null }[]> = {};
+    for (const f of favs) {
+      const m = memberById.get(f.memberId);
+      if (!m || m.blocked) continue; // hide blocked members from the crowd row
+      counts[f.songTitle] = (counts[f.songTitle] ?? 0) + 1;
+      (votersBySong[f.songTitle] ??= []).push({
+        id: m.id,
+        displayName: m.displayName,
+        photoUrl: memberPhotoUrl(m, players),
+      });
+    }
+    // Stable, friendly order for each song's avatar row.
+    for (const song of Object.keys(votersBySong)) {
+      votersBySong[song].sort((a, b) => a.displayName.localeCompare(b.displayName));
+    }
+
     const ranked = Object.entries(counts)
-      .map(([songTitle, count]) => ({ songTitle, count }))
+      .map(([songTitle, count]) => ({ songTitle, count, voters: votersBySong[songTitle] ?? [] }))
       .sort((a, b) => b.count - a.count);
+    const total = Object.values(counts).reduce((s, n) => s + n, 0);
     let myFavorite: string | null = null;
     if (req.session.memberId) {
       myFavorite = favs.find(f => f.memberId === req.session.memberId)?.songTitle ?? null;
     }
-    res.json({ total: favs.length, ranked, myFavorite });
+    res.json({ total, ranked, myFavorite });
   });
 
   // Set the member's own favorite song for an album.
@@ -1050,9 +1091,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const members = (await storage.listMembers()).filter(m => memberIds.has(m.id) && !m.blocked);
     members.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    const players = await storage.listPlayers();
     res.json({
       total: members.length,
-      voters: members.map(m => ({ id: m.id, displayName: m.displayName, photoUrl: m.photoUrl ?? null })),
+      voters: members.map(m => ({ id: m.id, displayName: m.displayName, photoUrl: memberPhotoUrl(m, players) })),
     });
   });
 
@@ -1234,8 +1276,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       songTitle: f.songTitle,
     }));
 
+    const players = await storage.listPlayers();
     res.json({
-      members: members.map(m => ({ id: m.id, displayName: m.displayName, photoUrl: m.photoUrl ?? null })),
+      members: members.map(m => ({ id: m.id, displayName: m.displayName, photoUrl: memberPhotoUrl(m, players) })),
       perMember,
       albumWinners,
       topPairs,

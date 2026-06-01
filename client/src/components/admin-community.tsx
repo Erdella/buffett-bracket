@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { Users, ShieldOff, ShieldCheck, Mail, Trophy, ListOrdered, ChevronUp, ChevronDown, Save, RotateCcw } from "lucide-react";
+import { Users, ShieldOff, ShieldCheck, Mail, Trophy, ListOrdered, ChevronUp, ChevronDown, Save, RotateCcw, GripVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /**
  * Admin view for the Parrothead Madness community layer.
@@ -76,6 +77,10 @@ function SeedingEditor({ albums }: { albums: Album[] }) {
   // Local working copy of the seed order so reordering feels instant.
   const [order, setOrder] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
+  // Drag-and-drop reordering state: the row currently being dragged and the row
+  // it's hovering over (the drop target). Both are list indices.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
   useEffect(() => {
     if (seeds.data) {
@@ -93,6 +98,26 @@ function SeedingEditor({ albums }: { albums: Album[] }) {
       return next;
     });
     setDirty(true);
+  };
+
+  // Move the song at `from` to position `to`, shifting the rest. Used by both
+  // drag-and-drop drops and keyboard reordering.
+  const moveTo = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return;
+    setOrder(prev => {
+      if (from >= prev.length || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const handleDrop = () => {
+    if (dragIdx != null && overIdx != null) moveTo(dragIdx, overIdx);
+    setDragIdx(null);
+    setOverIdx(null);
   };
 
   const saveMutation = useMutation({
@@ -156,42 +181,76 @@ function SeedingEditor({ albums }: { albums: Album[] }) {
         {seeds.isLoading ? (
           <div className="h-40 rounded-lg bg-muted animate-pulse" />
         ) : (
-          <ol className="space-y-1.5">
-            {order.map((song, i) => (
-              <li
-                key={song}
-                className="flex items-center gap-2 p-2 rounded-lg border border-card-border bg-card"
-                data-testid={`seed-row-${i}`}
-              >
-                <span className="text-xs font-mono text-muted-foreground w-7 shrink-0 text-right">#{i + 1}</span>
-                <span className="text-sm font-medium flex-1 min-w-0 truncate" data-testid={`seed-song-${i}`}>{song}</span>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    disabled={i === 0}
-                    onClick={() => move(i, -1)}
-                    data-testid={`button-seed-up-${i}`}
-                    aria-label={`Move ${song} up`}
+          <>
+            <p className="text-xs text-muted-foreground">
+              Drag a row by its handle to reorder, or use the arrows. Seed 1 is the top of the list.
+            </p>
+            <ol className="space-y-1.5" data-testid="seed-list">
+              {order.map((song, i) => {
+                const isDragging = dragIdx === i;
+                const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
+                return (
+                  <li
+                    key={song}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragIdx(i);
+                      e.dataTransfer.effectAllowed = "move";
+                      // Firefox requires data to be set for dragging to start.
+                      e.dataTransfer.setData("text/plain", song);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (overIdx !== i) setOverIdx(i);
+                    }}
+                    onDrop={(e) => { e.preventDefault(); handleDrop(); }}
+                    onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+                    className={cn(
+                      "flex items-center gap-2 p-2 rounded-lg border bg-card transition-colors",
+                      isOver ? "border-primary ring-1 ring-primary bg-primary/5" : "border-card-border",
+                      isDragging && "opacity-50",
+                    )}
+                    data-testid={`seed-row-${i}`}
                   >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    disabled={i === order.length - 1}
-                    onClick={() => move(i, 1)}
-                    data-testid={`button-seed-down-${i}`}
-                    aria-label={`Move ${song} down`}
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ol>
+                    <span
+                      className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/70 hover:text-foreground touch-none"
+                      aria-hidden
+                      data-testid={`seed-handle-${i}`}
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </span>
+                    <span className="text-xs font-mono text-muted-foreground w-7 shrink-0 text-right">#{i + 1}</span>
+                    <span className="text-sm font-medium flex-1 min-w-0 truncate" data-testid={`seed-song-${i}`}>{song}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        disabled={i === 0}
+                        onClick={() => move(i, -1)}
+                        data-testid={`button-seed-up-${i}`}
+                        aria-label={`Move ${song} up`}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        disabled={i === order.length - 1}
+                        onClick={() => move(i, 1)}
+                        data-testid={`button-seed-down-${i}`}
+                        aria-label={`Move ${song} down`}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </>
         )}
 
         <div className="flex items-center gap-2 flex-wrap">

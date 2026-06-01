@@ -101,6 +101,19 @@ export interface CommunityFavoritesData {
   myFavorite: string | null;
 }
 
+// Lightweight avatar info for an OG member who has participated in an album
+// (made a bracket pick or set a favorite).
+export interface AlbumVoter {
+  id: number;
+  displayName: string;
+  photoUrl?: string | null;
+}
+
+export interface AlbumVoters {
+  total: number;
+  voters: AlbumVoter[];
+}
+
 export interface AdminMember extends MemberInfo {
   createdAt: string;
   blocked: boolean;

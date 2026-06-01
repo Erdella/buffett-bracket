@@ -1033,6 +1033,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ...standings, hasPrelims: seeded.hasPrelims });
   });
 
+  // The OG members who have participated in an album: anyone who has made at
+  // least one bracket pick OR set a favorite song for it. Returns lightweight
+  // avatar info (id, display name, photo) so the album page can show a row of
+  // who's voted. Blocked members are excluded. Public (no auth).
+  app.get("/api/albums/:id/voters", async (req, res) => {
+    const albumId = Number(req.params.id);
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+
+    const picks = await storage.listCommunityPicksForAlbum(albumId);
+    const favs = await storage.listCommunityFavorites(albumId);
+    const memberIds = new Set<number>();
+    for (const p of picks) memberIds.add(p.memberId);
+    for (const f of favs) memberIds.add(f.memberId);
+
+    const members = (await storage.listMembers()).filter(m => memberIds.has(m.id) && !m.blocked);
+    members.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    res.json({
+      total: members.length,
+      voters: members.map(m => ({ id: m.id, displayName: m.displayName, photoUrl: m.photoUrl ?? null })),
+    });
+  });
+
   // ========================================================================
   // ADMIN: per-album community bracket SEEDING
   // The seed order is the source of truth for the seeded play-in bracket.

@@ -12,6 +12,7 @@ import {
 import { Trophy, Heart, Target, Star, ThumbsDown, Sparkles, Users, Crown, Gauge, Handshake } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { MemberAvatar } from "@/components/member-avatar";
 import { AlbumCover } from "@/components/album-cover";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -88,34 +89,6 @@ function SectionHeader({ icon: Icon, title, hint, destructive }: { icon: any; ti
   );
 }
 
-// Deterministic palette for OG member avatars (members have no stored color).
-const OG_COLORS = ["#01696F", "#C2410C", "#7C3AED", "#0F766E", "#B45309", "#1D4ED8", "#BE185D", "#15803D", "#9333EA", "#0891B2"];
-function ogColor(id: number) {
-  return OG_COLORS[id % OG_COLORS.length];
-}
-function MemberAvatar({ name, id, photoUrl, sizeClass = "h-9 w-9", textSizeClass = "text-sm" }: { name: string; id: number; photoUrl?: string | null; sizeClass?: string; textSizeClass?: string }) {
-  if (photoUrl) {
-    return (
-      <span
-        className={cn("rounded-full overflow-hidden flex items-center justify-center shrink-0 bg-muted ring-1 ring-black/5", sizeClass)}
-        title={name}
-        aria-label={name}
-      >
-        <img src={assetUrl(photoUrl)} alt={name} className="h-full w-full object-cover" loading="lazy" />
-      </span>
-    );
-  }
-  return (
-    <span
-      className={cn("rounded-full overflow-hidden flex items-center justify-center shrink-0 font-semibold text-white", sizeClass)}
-      style={{ backgroundColor: ogColor(id) }}
-      title={name}
-      aria-label={name}
-    >
-      <span className={cn("leading-none", textSizeClass)}>{name.charAt(0).toUpperCase()}</span>
-    </span>
-  );
-}
 
 const pctStr = (x: number) => `${Math.round(x * 100)}%`;
 

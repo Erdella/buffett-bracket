@@ -3,6 +3,7 @@ import type { Album } from "@/lib/types";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AlbumBracketEditor } from "@/components/album-bracket-editor";
 import { AlbumFavoritePicker } from "@/components/album-favorite-picker";
+import { AlbumVoters } from "@/components/album-voters";
 import { CommunityBracket } from "@/components/community-bracket";
 import { useAuth } from "@/hooks/use-auth";
 import { Home, Users } from "lucide-react";
@@ -38,6 +39,7 @@ export function AlbumArena({ album }: { album: Album }) {
           Parrothead Madness — fill out your own bracket and let the whole crew's picks crown a winner.
         </p>
         <CommunityBracket album={album} />
+        <AlbumVoters album={album} />
         <AlbumFavoritePicker album={album} />
       </div>
     );
@@ -70,6 +72,7 @@ export function AlbumArena({ album }: { album: Album }) {
           Parrothead Madness — fill out your own bracket and let the whole crew's picks crown a winner.
         </p>
         <CommunityBracket album={album} />
+        <AlbumVoters album={album} />
         <AlbumFavoritePicker album={album} />
       </TabsContent>
     </Tabs>

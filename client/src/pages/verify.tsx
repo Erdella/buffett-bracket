@@ -14,7 +14,7 @@ type State = "verifying" | "name" | "success" | "error";
  * Magic-link landing page. The link points at /#/verify/<token>
  * We read the token from the hash path, POST it to /api/member/verify, then:
  *  - if this is a first-time signer who never chose a display name, ask for one,
- *  - otherwise bounce to Now Playing.
+ *  - otherwise bounce to their personal "My Brackets" dashboard.
  */
 export default function Verify() {
   const [, navigate] = useLocation();
@@ -34,8 +34,9 @@ export default function Verify() {
 
   function finishToHome() {
     setState("success");
-    // Brief pause so the user sees the success state, then go vote.
-    setTimeout(() => navigate("/"), 1000);
+    // Brief pause so the user sees the success state, then drop them on their
+    // personal dashboard where they can see their progress and pick up brackets.
+    setTimeout(() => navigate("/my-brackets"), 1000);
   }
 
   useEffect(() => {
@@ -165,7 +166,7 @@ export default function Verify() {
               <div className="font-display text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
                 Welcome aboard{name ? `, ${name}` : ""}!
               </div>
-              <p className="text-sm text-muted-foreground">Taking you to the current round…</p>
+              <p className="text-sm text-muted-foreground">Taking you to your brackets…</p>
             </>
           )}
           {state === "error" && (
@@ -175,7 +176,7 @@ export default function Verify() {
                 Link didn't work
               </div>
               <p className="text-sm text-muted-foreground" data-testid="text-verify-error">{message}</p>
-              <Button onClick={() => navigate("/")} data-testid="button-verify-home">Back to Now Playing</Button>
+              <Button onClick={() => navigate("/")} data-testid="button-verify-home">Back to home</Button>
             </>
           )}
         </CardContent>

@@ -91,6 +91,7 @@ export interface IStorage {
   // community bracket picks (per-member personal bracket)
   listCommunityPicksForAlbum(albumId: number): Promise<CommunityBracketPick[]>;
   listCommunityPicksForMember(albumId: number, memberId: number): Promise<CommunityBracketPick[]>;
+  listCommunityPicksForMemberAll(memberId: number): Promise<CommunityBracketPick[]>;
   listAllCommunityPicks(): Promise<CommunityBracketPick[]>;
   upsertCommunityPick(albumId: number, memberId: number, round: number, matchIndex: number, songPicked: string): Promise<CommunityBracketPick>;
   // Remove a member's picks for an album at the given round and every round
@@ -411,6 +412,12 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(communityBracketPicks)
       .where(and(eq(communityBracketPicks.albumId, albumId), eq(communityBracketPicks.memberId, memberId)))
       .orderBy(asc(communityBracketPicks.round), asc(communityBracketPicks.matchIndex))
+      .all();
+  }
+  async listCommunityPicksForMemberAll(memberId: number): Promise<CommunityBracketPick[]> {
+    return db.select().from(communityBracketPicks)
+      .where(eq(communityBracketPicks.memberId, memberId))
+      .orderBy(asc(communityBracketPicks.albumId), asc(communityBracketPicks.round), asc(communityBracketPicks.matchIndex))
       .all();
   }
   async listAllCommunityPicks(): Promise<CommunityBracketPick[]> {

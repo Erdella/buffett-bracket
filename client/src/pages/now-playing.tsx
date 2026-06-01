@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { Album, AlbumStatus, Settings } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { Music, ArrowRight, Sparkles } from "lucide-react";
 
 export default function NowPlaying() {
-  const { isFamily } = useAuth();
+  const { isFamily, member, isLoading } = useAuth();
+  const [, navigate] = useLocation();
+
+  // Now Playing is the FAMILY bracket. Non-family visitors are redirected once
+  // auth resolves — signed-in members go to their own dashboard, others home.
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isFamily) navigate(member ? "/my-brackets" : "/", { replace: true });
+  }, [isLoading, isFamily, member, navigate]);
+
   const settings = useQuery<Settings>({ queryKey: ["/api/settings"] });
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
 
@@ -24,6 +34,9 @@ export default function NowPlaying() {
     enabled: !!currentId && isFamily,
   });
 
+  // While auth resolves, or for non-family (about to be redirected), show the
+  // skeleton rather than flashing any family content.
+  if (isLoading || !isFamily) return <SkeletonPage />;
   if (!settings.data) return <SkeletonPage />;
 
   if (!currentAlbum) {

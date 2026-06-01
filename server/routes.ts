@@ -17,7 +17,8 @@ import seedAlbums from "./seed-albums";
 import { sendMagicLink, mailConfigured } from "./email";
 import {
   buildRoundOne, derivePersonalBracket, computeStandings, resolveSeedOrder,
-  computeOGLeaderboard, computeOGPairAgreement, computeOGTopPairs, type OGAlbumInput,
+  computeOGLeaderboard, computeOGPairAgreement, computeOGTopPairs, totalMatchups,
+  type OGAlbumInput,
 } from "./community-bracket";
 
 // Public base URL used to build magic links. Falls back to the request origin.
@@ -1131,6 +1132,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       picks: picksByAlbum.get(a.id) ?? [],
     }));
   }
+
+  // Personalized progress for the signed-in member across every album: how many
+  // picks they've made vs. the total their bracket needs, plus their crowned
+  // champion when finished. Powers the "My Brackets" dashboard. 401 if signed out.
+  app.get("/api/community/my-progress", async (req, res) => {
+    const memberId = req.session.memberId;
+    if (!memberId) return res.status(401).json({ error: "Not signed in." });
+
+    const albumList = await storage.listAlbums();
+    const allPicks = await storage.listCommunityPicksForMemberAll(memberId);
+    const picksByAlbum = new Map<number, typeof allPicks>();
+    for (const p of allPicks) {
+      const arr = picksByAlbum.get(p.albumId) ?? [];
+      arr.push(p);
+      picksByAlbum.set(p.albumId, arr);
+    }
+
+    let completedAlbums = 0;
+    let availableAlbums = 0;
+    const albums = albumList.map(a => {
+      const tracks = JSON.parse(a.tracks) as string[];
+      const total = totalMatchups(a.seedOrder, tracks);
+      const available = total > 0;
+      if (available) availableAlbums += 1;
+      const picks = picksByAlbum.get(a.id) ?? [];
+      const seeded = buildRoundOne(a.seedOrder, tracks);
+      const bracket = available
+        ? derivePersonalBracket(seeded, picks)
+        : null;
+      // Made picks are capped at total (defensive — stale downstream picks are
+      // cleared on change, but never report more than the bracket needs).
+      const made = Math.min(picks.length, total);
+      const complete = !!bracket?.complete;
+      if (complete) completedAlbums += 1;
+      const status = !available
+        ? "unavailable"
+        : complete
+          ? "done"
+          : made > 0
+            ? "in_progress"
+            : "not_started";
+      return {
+        albumId: a.id,
+        title: a.title,
+        year: a.year,
+        available,
+        totalPicks: total,
+        madePicks: made,
+        complete,
+        champion: bracket?.champion ?? null,
+        status,
+      };
+    });
+
+    res.json({
+      totalAlbums: albumList.length,
+      availableAlbums,
+      completedAlbums,
+      albums,
+    });
+  });
 
   app.get("/api/community/leaderboard", async (_req, res) => {
     const members = (await storage.listMembers()).filter(m => !m.blocked);

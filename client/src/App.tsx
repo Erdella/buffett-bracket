@@ -9,6 +9,7 @@ import { AppHeader } from "@/components/app-header";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import NowPlaying from "@/pages/now-playing";
+import MyBrackets from "@/pages/my-brackets";
 import Albums from "@/pages/albums";
 import AlbumDetail from "@/pages/album-detail";
 import Results from "@/pages/results";
@@ -21,6 +22,7 @@ function AppRouter() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/now-playing" component={NowPlaying} />
+      <Route path="/my-brackets" component={MyBrackets} />
       <Route path="/albums" component={Albums} />
       <Route path="/albums/:id" component={AlbumDetail} />
       <Route path="/results" component={Results} />

@@ -131,6 +131,28 @@ export interface MyBracketData {
   bracket: PersonalBracket | null;
 }
 
+// ----- community: per-member progress dashboard ("My Brackets") -----
+export type MyProgressStatus = "unavailable" | "not_started" | "in_progress" | "done";
+
+export interface MyProgressAlbum {
+  albumId: number;
+  title: string;
+  year: number;
+  available: boolean;
+  totalPicks: number;
+  madePicks: number;
+  complete: boolean;
+  champion: string | null;
+  status: MyProgressStatus;
+}
+
+export interface MyProgress {
+  totalAlbums: number;
+  availableAlbums: number;
+  completedAlbums: number;
+  albums: MyProgressAlbum[];
+}
+
 export interface StandingRow {
   songTitle: string;
   points: number;

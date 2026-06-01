@@ -9,9 +9,12 @@ import { MemberAuthButton } from "@/components/member-auth-button";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
-const PUBLIC_NAV = [
-  { href: "/",            label: "Home" },
-  { href: "/now-playing", label: "Now Playing" },
+const HOME_NAV = [{ href: "/", label: "Home" }];
+// Now Playing is the FAMILY bracket — only family/admin see it in the nav.
+const NOW_PLAYING_NAV = [{ href: "/now-playing", label: "Now Playing" }];
+// My Brackets is each signed-in member's personal community dashboard.
+const MY_BRACKETS_NAV = [{ href: "/my-brackets", label: "My Brackets" }];
+const REST_NAV = [
   { href: "/albums",      label: "Albums" },
   { href: "/results",     label: "Results" },
   { href: "/leaderboard", label: "Leaderboard" },
@@ -21,9 +24,16 @@ const ADMIN_NAV = [{ href: "/admin", label: "Admin" }];
 export function AppHeader() {
   const [loc] = useLocation();
   const { theme, toggle } = useTheme();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isFamily, member } = useAuth();
   const [open, setOpen] = useState(false);
-  const NAV = isAdmin ? [...PUBLIC_NAV, ...ADMIN_NAV] : PUBLIC_NAV;
+  const signedIn = !!member;
+  const NAV = [
+    ...HOME_NAV,
+    ...(isFamily ? NOW_PLAYING_NAV : []),
+    ...(signedIn ? MY_BRACKETS_NAV : []),
+    ...REST_NAV,
+    ...(isAdmin ? ADMIN_NAV : []),
+  ];
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border/60">

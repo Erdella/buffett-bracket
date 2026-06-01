@@ -229,6 +229,20 @@ export function buildRoundOne(
 }
 
 /**
+ * Total number of matchups (= picks) a member must make to fully complete the
+ * bracket for an album. In a single-elimination bracket every song except the
+ * eventual champion loses exactly one game, so the count is (songs - 1).
+ * Returns 0 when there's no bracket (fewer than 2 songs).
+ */
+export function totalMatchups(
+  seedOrderJson: string | null | undefined,
+  tracks: string[],
+): number {
+  const seeds = resolveSeedOrder(seedOrderJson, tracks);
+  return seeds.length > 1 ? seeds.length - 1 : 0;
+}
+
+/**
  * Derive a single member's personal bracket from the shared seeded bracket plus
  * that member's own picks. Each round's matchups are computed from the member's
  * picks in the previous round (winners advance, paired by index). With the

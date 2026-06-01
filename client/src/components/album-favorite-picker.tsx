@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Heart, Star, Users } from "lucide-react";
+import { Heart, Star, Users, Music } from "lucide-react";
 
 /**
  * Lets a logged-in community member pick their single favorite song from an
@@ -56,8 +56,8 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <Heart className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold">Album favorites</h3>
+          <Music className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-display text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Tracklist</h3>
         </div>
         <Badge variant="secondary" className="gap-1 text-[11px]">
           <Users className="h-3 w-3" /> {total} {total === 1 ? "pick" : "picks"}
@@ -69,8 +69,8 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
           <CardContent className="py-4 flex items-center gap-3">
             <Star className="h-5 w-5 text-primary shrink-0" />
             <p className="text-sm">
-              <strong>Sign in</strong> to mark your favorite song from this album — and see how it
-              stacks up against the rest of the crew.
+              <strong>Sign in</strong> to tap a track and mark your favorite song from this album — and
+              see how it stacks up against the rest of the crew.
             </p>
           </CardContent>
         </Card>
@@ -110,6 +110,7 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
                     style={{ width: `${pct}%` }}
                   />
                 )}
+                <span className="relative text-xs text-muted-foreground font-mono w-6 shrink-0">{String(i + 1).padStart(2, "0")}</span>
                 <Heart
                   className={cn(
                     "h-4 w-4 shrink-0 relative",

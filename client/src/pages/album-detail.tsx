@@ -113,6 +113,10 @@ export default function AlbumDetail() {
       {/* Family bracket + community voting, cleanly separated by tab. */}
       <AlbumArena album={a} />
 
+      {/* For community members the tracklist IS the favorite picker (rendered
+          inside AlbumArena), so the static tracklist below is family-only — it
+          adds per-player favorite avatars and the family winner trophy. */}
+      {auth.isFamily && (
       <section>
         <h2 className="font-display text-xl font-bold mb-3 flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
           <Music className="h-5 w-5 text-muted-foreground" /> Tracklist
@@ -154,6 +158,7 @@ export default function AlbumDetail() {
           </CardContent>
         </Card>
       </section>
+      )}
     </div>
   );
 }

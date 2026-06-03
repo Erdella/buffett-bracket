@@ -1,17 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import type { Album, AlbumStatus, Settings, OGLeaderboardData } from "@/lib/types";
+import type { Album, Settings, OGLeaderboardData } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlbumCover } from "@/components/album-cover";
 import { BuffettLogo } from "@/components/logo";
 import { useAuth } from "@/hooks/use-auth";
 import { openMemberSignIn } from "@/components/member-auth-button";
 import {
   Swords,
   Trophy,
-  Music,
   Users,
   ArrowRight,
   Sparkles,
@@ -38,13 +36,6 @@ export default function Home() {
     : currentAlbum
       ? `/albums/${currentAlbum.id}`
       : "/albums";
-
-  // Album status carries the family winner, so it's family-only. Outsiders never
-  // fetch it and never see the "Completed" badge on the home card.
-  const status = useQuery<AlbumStatus | null>({
-    queryKey: ["/api/albums", currentId, "status"],
-    enabled: !!currentId && isFamily,
-  });
 
   const totalAlbums = albums.data?.length ?? 0;
   const completedAlbums =
@@ -125,70 +116,20 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ---------- LIVE STATUS STRIP ---------- */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Now playing */}
-        <Card className="sm:col-span-2 border-card-border overflow-hidden">
-          <CardContent className="p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
-                <Sparkles className="h-3 w-3 mr-1" /> Now Playing
-              </Badge>
-              {isFamily && status.data?.status === "completed" && (
-                <Badge className="bg-primary text-primary-foreground text-[10px]">Completed</Badge>
-              )}
-            </div>
-            {currentAlbum ? (
-              <div className="flex items-center gap-4">
-                <AlbumCover
-                  album={currentAlbum}
-                  sizeClass="h-16 w-16 sm:h-20 sm:w-20"
-                  roundedClass="rounded-lg"
-                />
-                <div className="min-w-0 flex-1">
-                  <div
-                    className="font-display font-bold text-lg sm:text-xl truncate"
-                    style={{ fontFamily: "var(--font-display)" }}
-                    data-testid="text-home-current-album"
-                  >
-                    {currentAlbum.title}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {currentAlbum.year} • {currentAlbum.tracks.length} tracks
-                  </div>
-                  <Button variant="ghost" size="sm" asChild className="mt-2 -ml-2 h-8">
-                    <Link href={liveBracketHref}>
-                      Open the bracket <ArrowRight className="h-4 w-4 ml-1.5" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <Music className="h-5 w-5" />
-                <span className="text-sm">
-                  No album is in play right now — check back soon for the next round.
-                </span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Quick stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-1 gap-4">
-          <Stat
-            icon={<Users className="h-4 w-4" />}
-            value={memberCount}
-            label="Parrotheads playing"
-            testId="stat-members"
-          />
-          <Stat
-            icon={<Trophy className="h-4 w-4" />}
-            value={`${completedAlbums} / ${totalAlbums}`}
-            label="Albums crowned"
-            testId="stat-albums"
-          />
-        </div>
+      {/* ---------- QUICK STATS ---------- */}
+      <section className="grid grid-cols-2 gap-4">
+        <Stat
+          icon={<Users className="h-4 w-4" />}
+          value={memberCount}
+          label="Parrotheads playing"
+          testId="stat-members"
+        />
+        <Stat
+          icon={<Trophy className="h-4 w-4" />}
+          value={`${completedAlbums} / ${totalAlbums}`}
+          label="Albums crowned"
+          testId="stat-albums"
+        />
       </section>
 
       {/* Discography progress */}

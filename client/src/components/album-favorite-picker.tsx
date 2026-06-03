@@ -136,6 +136,15 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
                       <Star className="h-3 w-3" /> Crowd favorite
                     </Badge>
                   )}
+                  {/* Voter avatars sit on the right, next to the pick count /
+                      Crowd favorite badge, instead of on their own line. */}
+                  {voters.length > 0 && (
+                    <AvatarStack
+                      voters={voters}
+                      max={10}
+                      testId={`favorite-voters-${album.id}-${i}`}
+                    />
+                  )}
                   {count > 0 && (
                     <span
                       className="text-xs tabular-nums text-muted-foreground shrink-0 w-5 text-right"
@@ -145,17 +154,6 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
                     </span>
                   )}
                 </div>
-                {/* Voter avatars on their own line so a popular song can show a
-                    full stack without crowding the title row. */}
-                {voters.length > 0 && (
-                  <div className="relative flex items-center pl-9">
-                    <AvatarStack
-                      voters={voters}
-                      max={10}
-                      testId={`favorite-voters-${album.id}-${i}`}
-                    />
-                  </div>
-                )}
               </div>
             );
           })}

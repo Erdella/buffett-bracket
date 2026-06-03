@@ -26,7 +26,9 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false, // set true behind HTTPS reverse proxy
+      // Set COOKIE_SECURE=true when serving over HTTPS (e.g. behind a Cloudflare
+      // tunnel / reverse proxy) so the session cookie is sent on secure requests.
+      secure: process.env.COOKIE_SECURE === "true",
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     },
   }),

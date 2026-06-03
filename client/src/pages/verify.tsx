@@ -26,10 +26,24 @@ export default function Verify() {
   const [savingName, setSavingName] = useState(false);
   const ran = useRef(false);
 
-  // Force the header (and anything else reading auth) to refetch immediately so
-  // the signed-in state shows without a manual page refresh.
+  // Force the header (and anything else reading auth) to reflect the new session
+  // immediately, without a manual page refresh.
+  //
+  // The magic link usually opens in a FRESH tab (from the email client), where
+  // the ["/api/auth/me"] query hasn't mounted yet. In that state
+  // `refetchQueries` is a no-op (it only touches active queries), so the header
+  // would keep showing "signed out" until the user manually refreshed. To avoid
+  // that race we fetch /api/auth/me ourselves and seed the cache directly, then
+  // also invalidate so any already-mounted consumers refetch.
   async function refreshAuth() {
-    await qc.refetchQueries({ queryKey: ["/api/auth/me"] });
+    try {
+      const res = await apiRequest("GET", "/api/auth/me");
+      const data = await res.json();
+      qc.setQueryData(["/api/auth/me"], data);
+    } catch {
+      // Best-effort: fall back to invalidation below.
+    }
+    await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
   }
 
   function finishToHome() {

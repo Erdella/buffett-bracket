@@ -31,6 +31,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5000
 
+# Build identity, baked in by the CI workflow (docker/metadata). Surfaced at
+# runtime via GET /api/version and the footer badge so you can confirm which
+# build is live. Defaults to "dev" for local builds that don't pass the args.
+ARG GIT_SHA=dev
+ARG BUILD_TIME=
+ENV GIT_SHA=$GIT_SHA
+ENV BUILD_TIME=$BUILD_TIME
+
 COPY --from=builder /app/dist ./dist
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./

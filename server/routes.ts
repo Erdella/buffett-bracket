@@ -352,6 +352,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Block mutations site-wide unless authorized (admin, member, or magic-link flow).
   app.use(requireAuthForMutations);
 
+  // --- version / build info ---
+  // Public. Surfaces the git commit + build time baked into the image at build
+  // time, so you can confirm which build is actually running when troubleshooting.
+  // Falls back to "dev" when running locally (env vars unset).
+  app.get("/api/version", (_req, res) => {
+    res.json({
+      sha: process.env.GIT_SHA || "dev",
+      buildTime: process.env.BUILD_TIME || null,
+    });
+  });
+
   // --- auth ---
   // Returns whether the current session is admin. Public; used by the client
   // to decide whether to render edit affordances.

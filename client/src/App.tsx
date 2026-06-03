@@ -1,7 +1,7 @@
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -50,6 +50,7 @@ function App() {
               <footer className="border-t border-border/60 py-6 mt-10">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 text-xs text-muted-foreground text-center">
                   Fins up. 🌴 Parrothead Madness — a Jimmy Buffett song-by-song showdown.
+                  <BuildBadge />
                 </div>
               </footer>
             </div>
@@ -57,6 +58,33 @@ function App() {
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
+  );
+}
+
+function BuildBadge() {
+  const { data } = useQuery<{ sha: string; buildTime: string | null }>({
+    queryKey: ["/api/version"],
+    staleTime: Infinity,
+  });
+  if (!data?.sha) return null;
+  const when = data.buildTime
+    ? new Date(data.buildTime).toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  return (
+    <div
+      className="mt-1.5 text-[10px] text-muted-foreground/60 font-mono"
+      data-testid="text-build-version"
+      title={when ? `Built ${when}` : undefined}
+    >
+      build {data.sha}
+      {when ? ` · ${when}` : ""}
+    </div>
   );
 }
 

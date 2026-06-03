@@ -18,6 +18,7 @@ import {
   Mail,
   ListMusic,
   Vote,
+  Scale,
 } from "lucide-react";
 
 export default function Home() {
@@ -92,14 +93,22 @@ export default function Home() {
                 </Link>
               </Button>
             ) : (
-              <Button
-                size="lg"
-                onClick={() => openMemberSignIn()}
-                className="gap-1.5"
-                data-testid="button-hero-join"
-              >
-                <Mail className="h-4 w-4" /> Join &amp; cast your votes
-              </Button>
+              <div className="flex flex-col items-center gap-1.5">
+                <Button
+                  size="lg"
+                  onClick={() => openMemberSignIn()}
+                  className="gap-1.5"
+                  data-testid="button-hero-join"
+                >
+                  <Mail className="h-4 w-4" /> Join &amp; cast your votes
+                </Button>
+                <span
+                  className="text-xs text-[hsl(195_45%_18%)]/75"
+                  data-testid="text-hero-nopassword"
+                >
+                  No password needed — just your email.
+                </span>
+              </div>
             )}
             <Button
               size="lg"
@@ -216,7 +225,7 @@ export default function Home() {
             New here? It's a March-Madness-style bracket — but for songs. Here's the rundown.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
           <Step
             n={1}
             icon={<ListMusic className="h-5 w-5" />}
@@ -231,9 +240,15 @@ export default function Home() {
           />
           <Step
             n={3}
+            icon={<Scale className="h-5 w-5" />}
+            title="Later rounds count more"
+            body="Picks are weighted: an early-round pick is worth 1 point, a semifinal pick 2, and the championship pick 4 — so how a song wins matters, not just that it wins."
+          />
+          <Step
+            n={4}
             icon={<Trophy className="h-5 w-5" />}
             title="Crown a champion"
-            body="Songs advance round by round until one track is crowned the album's winner. Then we move to the next record."
+            body="We tally everyone's weighted points; the song with the most is crowned the album's winner. Then we move on to the next record."
           />
         </div>
       </section>

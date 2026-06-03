@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { Users, ShieldOff, ShieldCheck, Mail, Trophy, ListOrdered, ChevronUp, ChevronDown, Save, RotateCcw, GripVertical } from "lucide-react";
+import { Users, ShieldOff, ShieldCheck, Mail, Trophy, ListOrdered, ChevronUp, ChevronDown, Save, RotateCcw, GripVertical, Eraser } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -320,6 +320,26 @@ function MemberManagement() {
     onError: (e: Error) => toast({ title: "Couldn't update member", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
 
+  // Wipe one member's OG picks + favorites across every album (keeps account).
+  const clearDataMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/members/${id}/clear-data`, undefined);
+      return res.json() as Promise<{ removed: { picks: number; favorites: number } }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/members"] });
+      // Their picks/favorites fed every album's standings + voter rows, so refresh broadly.
+      queryClient.invalidateQueries({ queryKey: ["/api/community/leaderboard"] });
+      queryClient.invalidateQueries();
+      const { picks, favorites } = data.removed;
+      toast({
+        title: "Member data cleared",
+        description: `Removed ${picks} bracket ${picks === 1 ? "pick" : "picks"} and ${favorites} favorite ${favorites === 1 ? "song" : "songs"}.`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't clear data", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+
   return (
     <Card>
       <CardContent className="p-5 sm:p-6 space-y-4">
@@ -327,7 +347,7 @@ function MemberManagement() {
           <Mail className="h-4 w-4 text-primary" />
           <div>
             <div className="font-semibold">OG Parrothead Madness Members</div>
-            <p className="text-xs text-muted-foreground">Everyone who's signed in with a magic link. Block anyone who shouldn't be voting.</p>
+            <p className="text-xs text-muted-foreground">Everyone who's signed in with a magic link. Block anyone who shouldn't be voting, or wipe a member's picks to reset them.</p>
           </div>
         </div>
 
@@ -350,8 +370,14 @@ function MemberManagement() {
                   </div>
                   <div className="text-xs text-muted-foreground truncate">{m.email}</div>
                 </div>
-                <Badge variant="secondary" className="text-[10px] shrink-0">
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] shrink-0"
+                  title={`${m.pickCount} bracket picks + ${m.favoriteCount} favorite songs across ${m.albumsPlayed} ${m.albumsPlayed === 1 ? "album" : "albums"}`}
+                  data-testid={`badge-member-votes-${m.id}`}
+                >
                   {m.voteCount} {m.voteCount === 1 ? "vote" : "votes"}
+                  {m.albumsPlayed > 0 && <span className="text-muted-foreground/80"> · {m.albumsPlayed} {m.albumsPlayed === 1 ? "album" : "albums"}</span>}
                 </Badge>
                 <Button
                   size="sm"
@@ -365,6 +391,20 @@ function MemberManagement() {
                   ) : (
                     <><ShieldOff className="h-3.5 w-3.5 mr-1" /> Block</>
                   )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  disabled={clearDataMutation.isPending || m.voteCount === 0}
+                  onClick={() => {
+                    if (confirm(`Delete ALL of ${m.displayName || m.email}'s OG picks and favorites across every album? This can't be undone. Their account stays, so they can play again.`)) {
+                      clearDataMutation.mutate(m.id);
+                    }
+                  }}
+                  data-testid={`button-clear-member-${m.id}`}
+                >
+                  <Eraser className="h-3.5 w-3.5 mr-1" /> Delete data
                 </Button>
               </div>
             ))}

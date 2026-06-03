@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { AlbumCover } from "@/components/album-cover";
 import { AlbumArena } from "@/components/album-arena";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X, Eraser } from "lucide-react";
 import { useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { assetUrl, queryClient } from "@/lib/queryClient";
+import { apiRequest, assetUrl, queryClient } from "@/lib/queryClient";
 
 export default function AlbumDetail() {
   const [, params] = useRoute<{ id: string }>("/albums/:id");
@@ -113,6 +114,9 @@ export default function AlbumDetail() {
       {/* Family bracket + community voting, cleanly separated by tab. */}
       <AlbumArena album={a} />
 
+      {/* Admin-only: reset the OG community bracket for THIS album. */}
+      {auth.isAdmin && <AdminClearCommunity album={a} />}
+
       {/* For community members the tracklist IS the favorite picker (rendered
           inside AlbumArena), so the static tracklist below is family-only — it
           adds per-player favorite avatars and the family winner trophy. */}
@@ -160,6 +164,62 @@ export default function AlbumDetail() {
       </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Admin-only control on an album page: wipe every OG community member's bracket
+ * picks and favorite-song picks for THIS album. The family bracket is left
+ * completely alone. Useful for re-running the album fresh or clearing test data.
+ */
+function AdminClearCommunity({ album }: { album: Album }) {
+  const { toast } = useToast();
+  const clear = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/albums/${album.id}/community/clear`, undefined);
+      return res.json() as Promise<{ removed: { picks: number; favorites: number } }>;
+    },
+    onSuccess: (data) => {
+      // This album's community standings, favorites, voters, and per-member
+      // brackets all just changed — refresh everything community-related.
+      queryClient.invalidateQueries();
+      const { picks, favorites } = data.removed;
+      toast({
+        title: "OG bracket cleared",
+        description: `Removed ${picks} bracket ${picks === 1 ? "pick" : "picks"} and ${favorites} favorite ${favorites === 1 ? "song" : "songs"} for ${album.title}.`,
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't clear the bracket", description: e?.message?.replace(/^\d+:\s*/, "") ?? "", variant: "destructive" }),
+  });
+
+  return (
+    <Card className="border-destructive/30">
+      <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold flex items-center gap-1.5">
+            <Eraser className="h-4 w-4 text-destructive" /> Admin · Clear OG bracket
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Wipes every OG member's picks and favorites for <strong>{album.title}</strong>. The family bracket is not affected.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive border-destructive/40 hover:text-destructive shrink-0"
+          disabled={clear.isPending}
+          onClick={() => {
+            if (confirm(`Clear ALL OG community picks and favorites for "${album.title}"? This can't be undone. The family bracket stays as-is.`)) {
+              clear.mutate();
+            }
+          }}
+          data-testid={`button-clear-community-${album.id}`}
+        >
+          <Eraser className="h-4 w-4 mr-1.5" /> {clear.isPending ? "Clearing…" : "Clear OG bracket"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

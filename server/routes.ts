@@ -1315,12 +1315,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/members", async (req, res) => {
     if (!req.session.isAdmin) return res.status(401).json({ error: "Admin required" });
     const list = await storage.listMembers();
-    // Include each member's vote count for context.
-    const allVotes = await storage.listAllCommunityVotes();
-    res.json(list.map(m => ({
-      ...m,
-      voteCount: allVotes.filter(v => v.memberId === m.id).length,
-    })));
+    // "Votes" for a member = their actual OG participation: every bracket pick
+    // they've made plus every favorite song they've set, across all albums.
+    // (The legacy communityVotes table is no longer written to, so counting it
+    // always showed 0 — that was the stale total the admin was seeing.)
+    const allPicks = await storage.listAllCommunityPicks();
+    const allFavorites = await storage.listAllCommunityFavorites();
+    res.json(list.map(m => {
+      const picks = allPicks.filter(p => p.memberId === m.id).length;
+      const favorites = allFavorites.filter(f => f.memberId === m.id).length;
+      return {
+        ...m,
+        // Distinct albums this member has touched (picked in or favorited).
+        albumsPlayed: new Set([
+          ...allPicks.filter(p => p.memberId === m.id).map(p => p.albumId),
+          ...allFavorites.filter(f => f.memberId === m.id).map(f => f.albumId),
+        ]).size,
+        pickCount: picks,
+        favoriteCount: favorites,
+        voteCount: picks + favorites,
+      };
+    }));
   });
   app.post("/api/members/:id/block", async (req, res) => {
     const id = Number(req.params.id);
@@ -1328,6 +1343,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { blocked } = schema.parse(req.body);
     await storage.setMemberBlocked(id, blocked);
     res.json({ ok: true });
+  });
+
+  // Admin: wipe ALL of one member's OG community data (bracket picks +
+  // favorites) across every album. The member account is kept so they can
+  // start fresh.
+  app.post("/api/members/:id/clear-data", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(401).json({ error: "Admin required" });
+    const id = Number(req.params.id);
+    const member = await storage.getMember(id);
+    if (!member) return res.status(404).json({ error: "Member not found" });
+    const removed = await storage.clearCommunityForMember(id);
+    res.json({ ok: true, removed });
+  });
+
+  // Admin: wipe ALL OG community data for a single album (every member's
+  // bracket picks + favorites). The family bracket for the album is untouched.
+  app.post("/api/albums/:id/community/clear", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(401).json({ error: "Admin required" });
+    const albumId = Number(req.params.id);
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+    const removed = await storage.clearCommunityForAlbum(albumId);
+    res.json({ ok: true, removed });
   });
 
   return httpServer;

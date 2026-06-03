@@ -98,6 +98,13 @@ export interface IStorage {
   // after it (used when an earlier pick changes and downstream picks are now
   // invalid because the bracket re-derives).
   deleteCommunityPicksFromRound(albumId: number, memberId: number, fromRound: number): Promise<void>;
+  // Admin reset helpers.
+  // Wipe ALL OG community data for a single album (every member's bracket picks,
+  // favorites, and legacy per-match votes). Returns counts removed for feedback.
+  clearCommunityForAlbum(albumId: number): Promise<{ picks: number; favorites: number; votes: number }>;
+  // Wipe ALL of one member's OG community data across every album (bracket
+  // picks, favorites, legacy votes). The member account itself is kept.
+  clearCommunityForMember(memberId: number): Promise<{ picks: number; favorites: number; votes: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -449,6 +456,31 @@ export class DatabaseStorage implements IStorage {
     if (idsToDelete.length > 0) {
       db.delete(communityBracketPicks).where(inArray(communityBracketPicks.id, idsToDelete)).run();
     }
+  }
+
+  async clearCommunityForAlbum(albumId: number): Promise<{ picks: number; favorites: number; votes: number }> {
+    const picks = db.delete(communityBracketPicks)
+      .where(eq(communityBracketPicks.albumId, albumId)).run();
+    const favorites = db.delete(communityFavorites)
+      .where(eq(communityFavorites.albumId, albumId)).run();
+    // Legacy per-match votes are keyed by matchId, not albumId, so map this
+    // album's match ids first, then delete any votes for them.
+    const matchIds = db.select({ id: bracketMatches.id }).from(bracketMatches)
+      .where(eq(bracketMatches.albumId, albumId)).all().map(r => r.id);
+    const votes = matchIds.length
+      ? db.delete(communityVotes).where(inArray(communityVotes.matchId, matchIds)).run()
+      : { changes: 0 };
+    return { picks: picks.changes, favorites: favorites.changes, votes: votes.changes };
+  }
+
+  async clearCommunityForMember(memberId: number): Promise<{ picks: number; favorites: number; votes: number }> {
+    const picks = db.delete(communityBracketPicks)
+      .where(eq(communityBracketPicks.memberId, memberId)).run();
+    const favorites = db.delete(communityFavorites)
+      .where(eq(communityFavorites.memberId, memberId)).run();
+    const votes = db.delete(communityVotes)
+      .where(eq(communityVotes.memberId, memberId)).run();
+    return { picks: picks.changes, favorites: favorites.changes, votes: votes.changes };
   }
 }
 

@@ -121,7 +121,11 @@ export interface AlbumVoters {
 export interface AdminMember extends MemberInfo {
   createdAt: string;
   blocked: boolean;
+  // Total OG participation = bracket picks + favorite songs across all albums.
   voteCount: number;
+  pickCount: number;
+  favoriteCount: number;
+  albumsPlayed: number;
 }
 
 // ----- community: per-member personal bracket (new model) -----

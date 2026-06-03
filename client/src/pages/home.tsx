@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 export default function Home() {
-  const { member } = useAuth();
+  const { member, isFamily } = useAuth();
   const settings = useQuery<Settings>({ queryKey: ["/api/settings"] });
   const albums = useQuery<Album[]>({ queryKey: ["/api/albums"] });
   const leaderboard = useQuery<OGLeaderboardData>({ queryKey: ["/api/community/leaderboard"] });
@@ -29,9 +29,20 @@ export default function Home() {
   const currentId = settings.data?.currentAlbumId ?? null;
   const currentAlbum = albums.data?.find((a) => a.id === currentId) ?? null;
 
+  // "Now Playing" (/now-playing) is the FAMILY bracket. Everyone else votes on
+  // the current album's own page, where the OG community bracket lives. Pick the
+  // right live-bracket destination for the viewer so no one hits a redirect.
+  const liveBracketHref = isFamily
+    ? "/now-playing"
+    : currentAlbum
+      ? `/albums/${currentAlbum.id}`
+      : "/albums";
+
+  // Album status carries the family winner, so it's family-only. Outsiders never
+  // fetch it and never see the "Completed" badge on the home card.
   const status = useQuery<AlbumStatus | null>({
     queryKey: ["/api/albums", currentId, "status"],
-    enabled: !!currentId,
+    enabled: !!currentId && isFamily,
   });
 
   const totalAlbums = albums.data?.length ?? 0;
@@ -76,7 +87,7 @@ export default function Home() {
                 className="gap-1.5"
                 data-testid="button-hero-play"
               >
-                <Link href="/now-playing">
+                <Link href={liveBracketHref}>
                   <Vote className="h-4 w-4" /> Go vote the current album
                 </Link>
               </Button>
@@ -97,7 +108,7 @@ export default function Home() {
               className="gap-1.5 bg-white/70 hover:bg-white/90 border-white/60"
               data-testid="button-hero-now-playing"
             >
-              <Link href="/now-playing">
+              <Link href={liveBracketHref}>
                 Watch the live bracket <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -114,7 +125,7 @@ export default function Home() {
               <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
                 <Sparkles className="h-3 w-3 mr-1" /> Now Playing
               </Badge>
-              {status.data?.status === "completed" && (
+              {isFamily && status.data?.status === "completed" && (
                 <Badge className="bg-primary text-primary-foreground text-[10px]">Completed</Badge>
               )}
             </div>
@@ -137,7 +148,7 @@ export default function Home() {
                     {currentAlbum.year} • {currentAlbum.tracks.length} tracks
                   </div>
                   <Button variant="ghost" size="sm" asChild className="mt-2 -ml-2 h-8">
-                    <Link href="/now-playing">
+                    <Link href={liveBracketHref}>
                       Open the bracket <ArrowRight className="h-4 w-4 ml-1.5" />
                     </Link>
                   </Button>

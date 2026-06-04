@@ -36,7 +36,7 @@ export function AlbumArena({ album }: { album: Album }) {
     return (
       <div className="w-full space-y-6">
         <p className="text-sm text-muted-foreground">
-          Parrothead Madness — fill out your own bracket and let the whole crew's picks crown a winner.
+          The Original Parrothead Madness — fill out your own bracket and let the whole crew's picks crown a winner.
         </p>
         <CommunityBracket album={album} />
         <AlbumVoters album={album} />
@@ -56,7 +56,7 @@ export function AlbumArena({ album }: { album: Album }) {
           <Home className="h-4 w-4" /> Family
         </TabsTrigger>
         <TabsTrigger value="community" data-testid="tab-community" className="gap-1.5">
-          <Users className="h-4 w-4" /> <span className="truncate">OG Parrothead Madness</span>
+          <Users className="h-4 w-4" /> <span className="truncate">The Original Parrothead Madness!</span>
         </TabsTrigger>
       </TabsList>
 
@@ -69,7 +69,7 @@ export function AlbumArena({ album }: { album: Album }) {
 
       <TabsContent value="community" className="mt-5 space-y-6">
         <p className="text-sm text-muted-foreground">
-          Parrothead Madness — fill out your own bracket and let the whole crew's picks crown a winner.
+          The Original Parrothead Madness — fill out your own bracket and let the whole crew's picks crown a winner.
         </p>
         <CommunityBracket album={album} />
         <AlbumVoters album={album} />

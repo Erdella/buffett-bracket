@@ -274,7 +274,7 @@ export function CommunityStandingsPanel({ album }: { album: Album }) {
       <CardContent className="p-4 sm:p-5 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-display font-bold text-base flex items-center gap-2" style={{ fontFamily: "var(--font-display)" }}>
-            <ListOrdered className="h-4 w-4 text-primary" /> OG Parrothead Madness standings
+            <ListOrdered className="h-4 w-4 text-primary" /> The Original Parrothead Madness standings
           </h3>
           <span className="text-xs text-muted-foreground" data-testid="text-voter-count">
             {voterCount} {voterCount === 1 ? "voter" : "voters"}
@@ -287,7 +287,7 @@ export function CommunityStandingsPanel({ album }: { album: Album }) {
 
         {ranked.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
-            No OG Parrothead Madness picks yet. Be the first to fill out a bracket.
+            No Original Parrothead Madness picks yet. Be the first to fill out a bracket.
           </p>
         ) : (
           <>
@@ -296,7 +296,7 @@ export function CommunityStandingsPanel({ album }: { album: Album }) {
                 <Crown className="h-5 w-5 text-primary shrink-0" />
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                    {topTie ? "Leading (tie)" : "OG Parrothead Madness winner"}
+                    {topTie ? "Leading (tie)" : "The Original Parrothead Madness winner"}
                   </div>
                   <div className="font-display font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-community-winner">
                     {winner}

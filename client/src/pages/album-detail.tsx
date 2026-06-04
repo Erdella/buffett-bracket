@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { AlbumCover } from "@/components/album-cover";
 import { AlbumArena } from "@/components/album-arena";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X, Eraser } from "lucide-react";
+import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X, Eraser, Info } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -91,6 +92,7 @@ export default function AlbumDetail() {
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{a.tracks.length} tracks</Badge>
+                <SeedingMethodBadge album={a} />
                 {/* Album status badges track the FAMILY bracket lifecycle, so
                     they're only shown to family. Outsiders just see track count. */}
                 {auth.isFamily && isComplete && <Badge className="bg-primary text-primary-foreground"><Trophy className="h-3 w-3 mr-1" /> Completed</Badge>}
@@ -167,6 +169,53 @@ export default function AlbumDetail() {
   );
 }
 
+// The first nine albums (Down to Earth through Volcano, orderIndex 0–8) were
+// seeded by their original track number. From Coconut Telegraph on (orderIndex
+// 9+), seeds were generated with AI based on popularity, cultural impact,
+// streams, and similar signals. This cutoff is data-driven off orderIndex so it
+// stays correct no matter how albums are added or reordered.
+const AI_SEEDING_FROM_ORDER_INDEX = 9;
+
+/**
+ * Small, tap-friendly badge explaining how THIS album's songs were seeded into
+ * the bracket. Shows the right method automatically based on the album's place
+ * in the discography.
+ */
+function SeedingMethodBadge({ album }: { album: Album }) {
+  const isAiSeeded = album.orderIndex >= AI_SEEDING_FROM_ORDER_INDEX;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground hover-elevate"
+          data-testid={`badge-seeding-${album.id}`}
+        >
+          <Info className="h-3 w-3" />
+          {isAiSeeded ? "AI-seeded" : "Track-order seeds"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 text-sm">
+        <div className="font-semibold mb-1">How this album was seeded</div>
+        {isAiSeeded ? (
+          <p className="text-muted-foreground">
+            Starting with <strong>Coconut Telegraph</strong>, seeds are generated with
+            AI based on each song's popularity, cultural impact, streams, and similar
+            signals — so the top seeds reflect the best-known tracks, not just their
+            spot on the record.
+          </p>
+        ) : (
+          <p className="text-muted-foreground">
+            For the early albums (<strong>Down to Earth</strong> through{" "}
+            <strong>Volcano</strong>), seed 1, 2, 3… simply follow the album's original
+            track order. AI-based seeding kicked in later, from Coconut Telegraph on.
+          </p>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * Admin-only control on an album page: wipe every OG community member's bracket
  * picks and favorite-song picks for THIS album. The family bracket is left
@@ -185,7 +234,7 @@ function AdminClearCommunity({ album }: { album: Album }) {
       queryClient.invalidateQueries();
       const { picks, favorites } = data.removed;
       toast({
-        title: "OG bracket cleared",
+        title: "Original bracket cleared",
         description: `Removed ${picks} bracket ${picks === 1 ? "pick" : "picks"} and ${favorites} favorite ${favorites === 1 ? "song" : "songs"} for ${album.title}.`,
       });
     },
@@ -198,10 +247,10 @@ function AdminClearCommunity({ album }: { album: Album }) {
       <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold flex items-center gap-1.5">
-            <Eraser className="h-4 w-4 text-destructive" /> Admin · Clear OG bracket
+            <Eraser className="h-4 w-4 text-destructive" /> Admin · Clear Original bracket
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Wipes every OG member's picks and favorites for <strong>{album.title}</strong>. The family bracket is not affected.
+            Wipes every Original Parrothead Madness member's picks and favorites for <strong>{album.title}</strong>. The family bracket is not affected.
           </p>
         </div>
         <Button
@@ -210,13 +259,13 @@ function AdminClearCommunity({ album }: { album: Album }) {
           className="text-destructive border-destructive/40 hover:text-destructive shrink-0"
           disabled={clear.isPending}
           onClick={() => {
-            if (confirm(`Clear ALL OG community picks and favorites for "${album.title}"? This can't be undone. The family bracket stays as-is.`)) {
+            if (confirm(`Clear ALL Original Parrothead Madness picks and favorites for "${album.title}"? This can't be undone. The family bracket stays as-is.`)) {
               clear.mutate();
             }
           }}
           data-testid={`button-clear-community-${album.id}`}
         >
-          <Eraser className="h-4 w-4 mr-1.5" /> {clear.isPending ? "Clearing…" : "Clear OG bracket"}
+          <Eraser className="h-4 w-4 mr-1.5" /> {clear.isPending ? "Clearing…" : "Clear Original bracket"}
         </Button>
       </CardContent>
     </Card>

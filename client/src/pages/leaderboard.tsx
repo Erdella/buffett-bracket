@@ -36,7 +36,7 @@ export default function Leaderboard() {
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Leaderboard</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {effectiveView === "family" ? "Whose taste matches the family?" : "How the OG Parrothead Madness crowd stacks up."}
+          {effectiveView === "family" ? "Whose taste matches the family?" : "How The Original Parrothead Madness crowd stacks up."}
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export default function Leaderboard() {
               view === "og" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover-elevate",
             )}
           >
-            OG Parrothead Madness
+            The Original Parrothead Madness!
           </button>
         </div>
       )}
@@ -474,7 +474,7 @@ function OGView() {
     return (
       <Card>
         <CardContent className="p-6 text-sm text-muted-foreground italic">
-          No OG Parrothead Madness members have joined yet. Once people sign in and fill out brackets, their stats appear here.
+          No Original Parrothead Madness members have joined yet. Once people sign in and fill out brackets, their stats appear here.
         </CardContent>
       </Card>
     );
@@ -522,7 +522,7 @@ function OGView() {
     <>
       {/* Champion Accuracy */}
       <section>
-        <SectionHeader icon={Crown} title="Champion Accuracy" hint="Of the albums you finished, how often your crowned champion matched the OG community winner." />
+        <SectionHeader icon={Crown} title="Champion Accuracy" hint="Of the albums you finished, how often your crowned champion matched the community winner." />
         {championRanked.length === 0 ? (
           <div className="text-sm text-muted-foreground italic">No finished brackets yet — pick a champion to land on the board.</div>
         ) : (
@@ -600,7 +600,7 @@ function OGView() {
 
       {/* Album Accuracy — dropdown to pick a member */}
       <section>
-        <SectionHeader icon={Star} title="Album Accuracy" hint="Pick a member to see their album-by-album results against the OG community." />
+        <SectionHeader icon={Star} title="Album Accuracy" hint="Pick a member to see their album-by-album results against the community." />
         <div className="mb-4 max-w-xs">
           <Select value={accuracyMemberId} onValueChange={setAccuracyMemberId}>
             <SelectTrigger data-testid="select-accuracy-member"><SelectValue placeholder="Select a member" /></SelectTrigger>
@@ -654,7 +654,7 @@ function OGView() {
 
       {/* Jolly Mon Gallery — top 5 by consensus */}
       <section data-testid="section-og-jolly-mon">
-        <SectionHeader icon={Sparkles} title="The Jolly Mon Gallery" hint="The 5 most consensus-aligned members of the OG Parrothead Madness crowd." />
+        <SectionHeader icon={Sparkles} title="The Jolly Mon Gallery" hint="The 5 most consensus-aligned members of The Original Parrothead Madness crowd." />
         {topConsensus.length === 0 ? (
           <div className="text-sm text-muted-foreground italic">No picks yet.</div>
         ) : (
@@ -677,7 +677,7 @@ function OGView() {
       {/* Lost Shakers — bottom 5 by consensus */}
       {bottomConsensus.length > 0 && (
         <section data-testid="section-og-lost-shakers">
-          <SectionHeader icon={ThumbsDown} title="The Lost Shakers of Salt" hint="The 5 most contrarian members — least aligned with the OG crowd. No shade." destructive />
+          <SectionHeader icon={ThumbsDown} title="The Lost Shakers of Salt" hint="The 5 most contrarian members — least aligned with the crowd. No shade." destructive />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {bottomConsensus.map((s, i) => (
               <Card key={s.memberId} className="border-destructive/30" data-testid={`og-lost-shaker-${i + 1}`}>
@@ -696,9 +696,9 @@ function OGView() {
 
       {/* OG album winners */}
       <section>
-        <SectionHeader icon={Trophy} title="OG Parrothead Madness Album Winners" />
+        <SectionHeader icon={Trophy} title="The Original Parrothead Madness Album Winners" />
         {ogWinners.length === 0 ? (
-          <div className="text-sm text-muted-foreground italic">No OG Parrothead Madness winners yet — once enough brackets are filled, winners appear here.</div>
+          <div className="text-sm text-muted-foreground italic">No Original Parrothead Madness winners yet — once enough brackets are filled, winners appear here.</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {ogWinners.map(w => (

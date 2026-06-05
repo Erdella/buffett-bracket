@@ -15,6 +15,7 @@ import AlbumDetail from "@/pages/album-detail";
 import Results from "@/pages/results";
 import Leaderboard from "@/pages/leaderboard";
 import Admin from "@/pages/admin";
+import MemberBrackets from "@/pages/member-brackets";
 import Verify from "@/pages/verify";
 
 function AppRouter() {
@@ -28,6 +29,7 @@ function AppRouter() {
       <Route path="/results" component={Results} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/admin" component={Admin} />
+      <Route path="/admin/members/:id" component={MemberBrackets} />
       <Route path="/verify/:token" component={Verify} />
       <Route path="/verify" component={Verify} />
       <Route component={NotFound} />

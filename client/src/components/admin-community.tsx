@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { Users, ShieldOff, ShieldCheck, Mail, Trophy, ListOrdered, ChevronUp, ChevronDown, Save, RotateCcw, GripVertical, Eraser } from "lucide-react";
+import { Users, ShieldOff, ShieldCheck, Mail, Trophy, ListOrdered, ChevronUp, ChevronDown, Save, RotateCcw, GripVertical, Eraser, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 /**
  * Admin view for the Parrothead Madness community layer.
@@ -379,6 +380,15 @@ function MemberManagement() {
                   {m.voteCount} {m.voteCount === 1 ? "vote" : "votes"}
                   {m.albumsPlayed > 0 && <span className="text-muted-foreground/80"> · {m.albumsPlayed} {m.albumsPlayed === 1 ? "album" : "albums"}</span>}
                 </Badge>
+                <Link href={`/admin/members/${m.id}`}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid={`button-view-brackets-${m.id}`}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" /> View brackets
+                  </Button>
+                </Link>
                 <Button
                   size="sm"
                   variant={m.blocked ? "secondary" : "ghost"}

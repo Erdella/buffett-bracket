@@ -1368,6 +1368,102 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true, removed });
   });
 
+  // ========================================================================
+  // ADMIN: read-only member bracket viewer
+  // Lets the admin inspect exactly what any single member has voted for,
+  // album by album, without impersonating them. Mirrors the derivation used
+  // by /api/community/my-progress and /api/albums/:id/my-bracket, but keyed
+  // off an explicit memberId path param instead of the session.
+  // ========================================================================
+
+  // Overview for one member: per-album champion + favorite + pick progress.
+  // Powers the top of the admin member-bracket page (album-by-album summary).
+  app.get("/api/admin/members/:memberId/overview", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(401).json({ error: "Admin required" });
+    const memberId = Number(req.params.memberId);
+    const member = await storage.getMember(memberId);
+    if (!member) return res.status(404).json({ error: "Member not found" });
+
+    const albumList = await storage.listAlbums();
+    const allPicks = await storage.listCommunityPicksForMemberAll(memberId);
+    const allFavs = (await storage.listAllCommunityFavorites()).filter(f => f.memberId === memberId);
+    const favByAlbum = new Map<number, string>();
+    for (const f of allFavs) favByAlbum.set(f.albumId, f.songTitle);
+
+    const picksByAlbum = new Map<number, typeof allPicks>();
+    for (const p of allPicks) {
+      const arr = picksByAlbum.get(p.albumId) ?? [];
+      arr.push(p);
+      picksByAlbum.set(p.albumId, arr);
+    }
+
+    let completedAlbums = 0;
+    let availableAlbums = 0;
+    const albums = albumList.map(a => {
+      const tracks = JSON.parse(a.tracks) as string[];
+      const total = totalMatchups(a.seedOrder, tracks);
+      const available = total > 0;
+      if (available) availableAlbums += 1;
+      const picks = picksByAlbum.get(a.id) ?? [];
+      const seeded = buildRoundOne(a.seedOrder, tracks);
+      const bracket = available ? derivePersonalBracket(seeded, picks) : null;
+      const made = Math.min(picks.length, total);
+      const complete = !!bracket?.complete;
+      if (complete) completedAlbums += 1;
+      const status = !available
+        ? "unavailable"
+        : complete
+          ? "done"
+          : made > 0
+            ? "in_progress"
+            : "not_started";
+      return {
+        albumId: a.id,
+        title: a.title,
+        year: a.year,
+        available,
+        totalPicks: total,
+        madePicks: made,
+        complete,
+        champion: bracket?.champion ?? null,
+        favorite: favByAlbum.get(a.id) ?? null,
+        status,
+      };
+    });
+
+    res.json({
+      member: { id: member.id, displayName: member.displayName, email: member.email },
+      totalAlbums: albumList.length,
+      availableAlbums,
+      completedAlbums,
+      albums,
+    });
+  });
+
+  // One member's full personal bracket for a single album (every matchup,
+  // round by round, with the song they picked + crowned champion + favorite).
+  app.get("/api/admin/members/:memberId/albums/:albumId/bracket", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(401).json({ error: "Admin required" });
+    const memberId = Number(req.params.memberId);
+    const albumId = Number(req.params.albumId);
+    const member = await storage.getMember(memberId);
+    if (!member) return res.status(404).json({ error: "Member not found" });
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+
+    const tracks = JSON.parse(album.tracks) as string[];
+    const seeded = buildRoundOne(album.seedOrder, tracks);
+    if (seeded.roundOne.length === 0) {
+      return res.json({ available: false, bracket: null, favorite: null });
+    }
+
+    const picks = await storage.listCommunityPicksForMember(albumId, memberId);
+    const bracket = derivePersonalBracket(seeded, picks);
+    const allFavs = await storage.listAllCommunityFavorites();
+    const favorite = allFavs.find(f => f.memberId === memberId && f.albumId === albumId)?.songTitle ?? null;
+    res.json({ available: true, bracket, favorite });
+  });
+
   return httpServer;
 }
 

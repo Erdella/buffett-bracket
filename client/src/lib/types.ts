@@ -256,6 +256,36 @@ export interface OGPairAgreement {
   sameChampionCount: number;
 }
 
+// ----- admin: read-only member bracket viewer -----
+// Per-album summary for a single member (admin overview page header list).
+export interface AdminMemberAlbumOverview {
+  albumId: number;
+  title: string;
+  year: number;
+  available: boolean;
+  totalPicks: number;
+  madePicks: number;
+  complete: boolean;
+  champion: string | null;
+  favorite: string | null;
+  status: MyProgressStatus;
+}
+
+export interface AdminMemberOverview {
+  member: { id: number; displayName: string; email: string };
+  totalAlbums: number;
+  availableAlbums: number;
+  completedAlbums: number;
+  albums: AdminMemberAlbumOverview[];
+}
+
+// One member's full bracket for one album (admin viewer, read-only).
+export interface AdminMemberBracket {
+  available: boolean;
+  bracket: PersonalBracket | null;
+  favorite: string | null;
+}
+
 // ----- community: per-album seeding (admin) -----
 export interface AlbumSeeds {
   // Resolved seed order, seed 1 (best) -> seed N, in slot order.

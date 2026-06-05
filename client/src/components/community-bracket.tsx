@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick } from "lucide-react";
+import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick, Hand } from "lucide-react";
 
 /**
  * Human label for a round given its position relative to the final round, and
@@ -87,6 +87,26 @@ export function CommunityBracket({ album }: { album: Album }) {
 
   const bracket = myBracket.data.bracket;
   const { totalRounds, hasPrelims } = bracket;
+
+  // First-timer hint: if a signed-in member hasn't made a single pick on this
+  // bracket yet, pulse a "tap here" cue on the very first real (non-bye) matchup
+  // so they know exactly where to start. The moment they pick anything, this
+  // flips false and the hint disappears.
+  const hasAnyPick = bracket.rounds.some(matches => matches.some(m => !!m.pick));
+  let hintRound: number | null = null;
+  let hintMatchIndex: number | null = null;
+  if (member && !hasAnyPick) {
+    outer: for (let ri = 0; ri < bracket.rounds.length; ri++) {
+      for (const m of bracket.rounds[ri]) {
+        const isBye = (!!m.songA && !m.songB) || (!!m.songB && !m.songA);
+        if (!isBye) {
+          hintRound = ri + 1;
+          hintMatchIndex = m.matchIndex;
+          break outer;
+        }
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -170,6 +190,7 @@ export function CommunityBracket({ album }: { album: Album }) {
                     match={m}
                     canPick={!!member}
                     pending={pickMutation.isPending}
+                    showHint={round === hintRound && m.matchIndex === hintMatchIndex}
                     onPick={(song) =>
                       pickMutation.mutate({ round, matchIndex: m.matchIndex, songPicked: song })
                     }
@@ -188,11 +209,12 @@ export function CommunityBracket({ album }: { album: Album }) {
 }
 
 function PersonalMatchCard({
-  match, canPick, pending, onPick,
+  match, canPick, pending, showHint = false, onPick,
 }: {
   match: PersonalMatch;
   canPick: boolean;
   pending: boolean;
+  showHint?: boolean;
   onPick: (song: string) => void;
 }) {
   const { songA, songB, pick } = match;
@@ -212,15 +234,34 @@ function PersonalMatchCard({
   }
 
   const hasPick = !!pick;
+  // Only ever hint on an unpicked, tappable matchup.
+  const hinting = showHint && canPick && !hasPick;
 
   return (
     <Card
       className={cn(
-        "overflow-hidden transition-colors",
+        "relative overflow-visible transition-colors",
         hasPick ? "border-primary/40 bg-primary/[0.03]" : "border-card-border bg-muted/40",
+        hinting && "border-primary ring-2 ring-primary/60",
       )}
       data-testid={`match-${match.round}-${match.matchIndex}`}
     >
+      {/* First-timer cue: a soft pulsing ring + a bouncing "Start here" tag. */}
+      {hinting && (
+        <>
+          <span
+            className="pointer-events-none absolute -inset-px rounded-xl ring-2 ring-primary/50 animate-ping"
+            aria-hidden
+          />
+          <span
+            className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-primary-foreground shadow-md animate-bounce whitespace-nowrap"
+            data-testid={`hint-${match.round}-${match.matchIndex}`}
+          >
+            <Hand className="h-3 w-3" /> Start here — tap a song
+          </span>
+        </>
+      )}
+
       <CardContent className="p-3 sm:p-4">
         {/* Tiny status line so it's obvious whether this matchup still needs a tap. */}
         <div className="flex items-center justify-between mb-2">

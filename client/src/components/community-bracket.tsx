@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote } from "lucide-react";
+import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick } from "lucide-react";
 
 /**
  * Human label for a round given its position relative to the final round, and
@@ -115,6 +115,19 @@ export function CommunityBracket({ album }: { album: Album }) {
         </Card>
       )}
 
+      {member && !bracket.complete && (
+        <Card className="border-primary/40 bg-primary/5" data-testid="card-how-to-vote">
+          <CardContent className="py-3.5 flex items-start gap-3">
+            <MousePointerClick className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <p className="text-sm leading-snug">
+              <strong>How to vote:</strong> in each matchup below, tap the song you like better
+              of the two. Your pick advances to the next round — keep going until one song is
+              crowned your champion.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {member && bracket.complete && bracket.champion && (
         <Card className="border-primary/40 bg-primary/5">
           <CardContent className="py-4 flex items-center gap-3">
@@ -135,13 +148,20 @@ export function CommunityBracket({ album }: { album: Album }) {
           const pts = pointsForRound(round, totalRounds);
           return (
             <div key={round} className="space-y-3" data-testid={`round-${round}`}>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>
-                  {roundLabel(round, totalRounds, hasPrelims)}
-                </h3>
-                <Badge variant="secondary" className="text-[10px] gap-1">
-                  <Trophy className="h-3 w-3" /> {pts} {pts === 1 ? "pt" : "pts"} / pick
-                </Badge>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-display font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>
+                    {roundLabel(round, totalRounds, hasPrelims)}
+                  </h3>
+                  <Badge variant="secondary" className="text-[10px] gap-1">
+                    <Trophy className="h-3 w-3" /> {pts} {pts === 1 ? "pt" : "pts"} / pick
+                  </Badge>
+                </div>
+                {member && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Tap your favorite song in each matchup below.
+                  </p>
+                )}
               </div>
               <div className="grid gap-3">
                 {matches.map(m => (
@@ -191,10 +211,38 @@ function PersonalMatchCard({
     );
   }
 
+  const hasPick = !!pick;
+
   return (
-    <Card className="border-card-border overflow-hidden">
+    <Card
+      className={cn(
+        "overflow-hidden transition-colors",
+        hasPick ? "border-primary/40 bg-primary/[0.03]" : "border-card-border bg-muted/40",
+      )}
+      data-testid={`match-${match.round}-${match.matchIndex}`}
+    >
       <CardContent className="p-3 sm:p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {/* Tiny status line so it's obvious whether this matchup still needs a tap. */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground whitespace-nowrap">
+            Matchup
+          </span>
+          {canPick && (
+            hasPick ? (
+              <span className="text-[10px] font-semibold text-primary inline-flex items-center gap-1" data-testid={`status-${match.round}-${match.matchIndex}`}>
+                <Check className="h-3 w-3" /> Your pick
+              </span>
+            ) : (
+              <span className="text-[10px] font-semibold text-muted-foreground" data-testid={`status-${match.round}-${match.matchIndex}`}>
+                Tap one ↓
+              </span>
+            )
+          )}
+        </div>
+
+        {/* Two options with a "vs" between them. On mobile they stack with a
+            horizontal vs divider; on desktop they sit side by side with a vs chip. */}
+        <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-6 items-center">
           <PickOption
             label={songA}
             selected={pick === songA}
@@ -203,6 +251,22 @@ function PersonalMatchCard({
             testId={`pick-a-${match.round}-${match.matchIndex}`}
             onClick={() => songA && onPick(songA)}
           />
+
+          {/* Mobile: vs sits between the stacked rows. */}
+          <div className="sm:hidden flex items-center gap-2 py-0.5" aria-hidden>
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">vs</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* Desktop: vs chip centered between the two columns. */}
+          <span
+            className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-[10px] font-bold uppercase tracking-wider text-muted-foreground shadow-sm"
+            aria-hidden
+          >
+            vs
+          </span>
+
           <PickOption
             label={songB}
             selected={pick === songB}
@@ -238,7 +302,7 @@ function PickOption({
       className={cn(
         "relative w-full text-left rounded-lg border p-3 transition-colors",
         "min-h-[3.25rem] flex items-center justify-between gap-2",
-        selected ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-border bg-card",
+        selected ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-border bg-background",
         canPick && !pending ? "hover-elevate active-elevate cursor-pointer" : "cursor-default",
       )}
     >

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import type { Album, Settings, OGLeaderboardData } from "@/lib/types";
+import type { Album, Settings, OGLeaderboardData, MyProgress } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,14 +28,41 @@ export default function Home() {
   const currentId = settings.data?.currentAlbumId ?? null;
   const currentAlbum = albums.data?.find((a) => a.id === currentId) ?? null;
 
-  // "Now Playing" (/now-playing) is the FAMILY bracket. Everyone else votes on
-  // the current album's own page, where the OG community bracket lives. Pick the
+  // For a signed-in OG community member, send them to the oldest album they
+  // still have voting to do — preferring one they've already started, then the
+  // oldest one they haven't touched. (Only fetched for non-family members.)
+  const progress = useQuery<MyProgress>({
+    queryKey: ["/api/community/my-progress"],
+    enabled: !!member && !isFamily,
+  });
+
+  // my-progress albums are ordered oldest-first (by orderIndex).
+  const progressAlbums = progress.data?.albums ?? [];
+  const nextMemberAlbum =
+    progressAlbums.find((a) => a.status === "in_progress") ??
+    progressAlbums.find((a) => a.status === "not_started" && a.available) ??
+    null;
+
+  // "Now Playing" (/now-playing) is the FAMILY bracket. Community members vote on
+  // a specific album's own page, where the OG community bracket lives. Pick the
   // right live-bracket destination for the viewer so no one hits a redirect.
   const liveBracketHref = isFamily
     ? "/now-playing"
-    : currentAlbum
-      ? `/albums/${currentAlbum.id}`
-      : "/albums";
+    : nextMemberAlbum
+      ? `/albums/${nextMemberAlbum.albumId}`
+      : currentAlbum
+        ? `/albums/${currentAlbum.id}`
+        : "/albums";
+
+  // Label the hero CTA to match where it actually sends a community member:
+  // resume an in-progress album, start the next untouched one, or fall back.
+  const heroVoteLabel = isFamily
+    ? "Go vote the current album"
+    : nextMemberAlbum?.status === "in_progress"
+      ? "Keep voting your bracket"
+      : nextMemberAlbum
+        ? "Start your next album"
+        : "Go vote the current album";
 
   const totalAlbums = albums.data?.length ?? 0;
   const completedAlbums =
@@ -80,7 +107,7 @@ export default function Home() {
                 data-testid="button-hero-play"
               >
                 <Link href={liveBracketHref}>
-                  <Vote className="h-4 w-4" /> Go vote the current album
+                  <Vote className="h-4 w-4" /> {heroVoteLabel}
                 </Link>
               </Button>
             ) : (

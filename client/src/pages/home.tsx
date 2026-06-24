@@ -132,7 +132,7 @@ export default function Home() {
               size="lg"
               variant="outline"
               asChild
-              className="gap-1.5 bg-white/70 hover:bg-white/90 border-white/60"
+              className="gap-1.5 bg-white/80 hover:bg-white/95 border-white/70 text-[hsl(195_50%_12%)] hover:text-[hsl(195_50%_12%)]"
               data-testid="button-hero-now-playing"
             >
               <Link href={liveBracketHref}>

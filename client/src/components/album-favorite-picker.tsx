@@ -1,48 +1,25 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { Album, CommunityFavoritesData } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Heart, Star, Users, Music } from "lucide-react";
+import { Heart, Star, Users, Music, Trophy } from "lucide-react";
 import { AvatarStack } from "@/components/avatar-stack";
 
 /**
- * Lets a logged-in community member pick their single favorite song from an
- * album, and shows the community's aggregated favorites ranking for that album.
- * The picker is a tap-to-select list of every track. The current pick is
- * highlighted with a filled heart. Tapping a different track changes the pick.
+ * Shows the album tracklist alongside the community's favorites. A member's
+ * favorite is no longer picked separately — it is DERIVED from their bracket:
+ * whatever song they crown as the album champion is their favorite. This list
+ * is read-only; voting happens in the bracket above. Each track shows who
+ * crowned it (avatars) and how many members did.
  */
 export function AlbumFavoritePicker({ album }: { album: Album }) {
   const { member } = useAuth();
-  const { toast } = useToast();
 
   const favorites = useQuery<CommunityFavoritesData>({
     queryKey: ["/api/albums", album.id, "community-favorites"],
     refetchInterval: 30_000,
-  });
-
-  const favMutation = useMutation({
-    mutationFn: async (songTitle: string) => {
-      const res = await apiRequest("POST", "/api/community/favorite", {
-        albumId: album.id,
-        songTitle,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/albums", album.id, "community-favorites"] });
-      toast({ title: "Favorite saved", description: "Your pick for this album is locked in. Fins up. 🌴" });
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Couldn't save your favorite",
-        description: err.message.replace(/^\d+:\s*/, ""),
-        variant: "destructive",
-      });
-    },
   });
 
   if (!favorites.data) {
@@ -51,7 +28,6 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
 
   const { ranked, total, myFavorite } = favorites.data;
   const rankFor = (song: string) => ranked.find(r => r.songTitle === song);
-  const countFor = (song: string) => rankFor(song)?.count ?? 0;
   const topCount = ranked[0]?.count ?? 0;
 
   return (
@@ -62,24 +38,27 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
           <h3 className="font-display text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Tracklist</h3>
         </div>
         <Badge variant="secondary" className="gap-1 text-[11px]">
-          <Users className="h-3 w-3" /> {total} {total === 1 ? "pick" : "picks"}
+          <Users className="h-3 w-3" /> {total} {total === 1 ? "favorite" : "favorites"}
         </Badge>
       </div>
 
       {!member ? (
         <Card className="bg-primary/5 border-primary/30">
           <CardContent className="py-4 flex items-center gap-3">
-            <Star className="h-5 w-5 text-primary shrink-0" />
+            <Trophy className="h-5 w-5 text-primary shrink-0" />
             <p className="text-sm">
-              <strong>Sign in</strong> to tap a track and mark your favorite song from this album — and
-              see how it stacks up against the rest of the crew.
+              <strong>Sign in</strong> and fill out your bracket — the song you crown as the album
+              champion becomes your favorite, and you'll see how it stacks up against the crew.
             </p>
           </CardContent>
         </Card>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Tap a track to set it as your favorite from <strong className="text-foreground">{album.title}</strong>.
-          {myFavorite && <> Your current pick: <strong className="text-foreground">{myFavorite}</strong>.</>}
+          Your favorite from <strong className="text-foreground">{album.title}</strong> is whoever you
+          crown in your bracket above.
+          {myFavorite
+            ? <> Right now that's <strong className="text-foreground">{myFavorite}</strong>.</>
+            : <> Finish your bracket to lock it in.</>}
         </p>
       )}
 
@@ -92,26 +71,13 @@ export function AlbumFavoritePicker({ album }: { album: Album }) {
             const isMine = myFavorite === track;
             const isTop = count > 0 && count === topCount;
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const pick = () => { if (member && !favMutation.isPending) favMutation.mutate(track); };
             return (
               <div
                 key={i}
-                role="button"
-                tabIndex={member ? 0 : -1}
-                onClick={pick}
-                onKeyDown={(e) => {
-                  if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
-                    e.preventDefault();
-                    pick();
-                  }
-                }}
-                aria-pressed={isMine}
-                aria-disabled={!member || favMutation.isPending}
                 data-testid={`favorite-track-${album.id}-${i}`}
                 className={cn(
-                  "relative w-full text-left px-4 py-3 flex flex-col gap-2 text-sm overflow-hidden transition-colors",
+                  "relative w-full text-left px-4 py-3 flex flex-col gap-2 text-sm overflow-hidden",
                   isMine && "bg-primary/10",
-                  member ? "hover-elevate active-elevate cursor-pointer" : "cursor-default",
                 )}
               >
                 {/* Subtle popularity fill */}

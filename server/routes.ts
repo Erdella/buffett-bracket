@@ -930,12 +930,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // COMMUNITY: album favorites
   // ========================================================================
 
-  // Aggregated favorites for an album + the member's own pick.
+  // Aggregated "favorites" for an album + the member's own pick. A member's
+  // favorite is now DERIVED from their bracket: whatever song they crowned as
+  // the album champion is treated as their favorite. There is no separate
+  // favorite-picking step anymore — completing the bracket sets it. Members who
+  // haven't finished their bracket (no champion yet) simply don't appear here.
   app.get("/api/albums/:id/community-favorites", async (req, res) => {
     const albumId = Number(req.params.id);
-    const favs = await storage.listCommunityFavorites(albumId);
+    const album = await storage.getAlbum(albumId);
 
-    // Resolve each favorite to a non-blocked member with their effective avatar
+    // Resolve each champion to a non-blocked member with their effective avatar
     // (own photo → linked family-player photo → initials). Build a lookup once.
     const allMembers = await storage.listMembers();
     const players = await storage.listPlayers();
@@ -943,16 +947,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const counts: Record<string, number> = {};
     const votersBySong: Record<string, { id: number; displayName: string; photoUrl: string | null }[]> = {};
-    for (const f of favs) {
-      const m = memberById.get(f.memberId);
-      if (!m || m.blocked) continue; // hide blocked members from the crowd row
-      counts[f.songTitle] = (counts[f.songTitle] ?? 0) + 1;
-      (votersBySong[f.songTitle] ??= []).push({
-        id: m.id,
-        displayName: m.displayName,
-        photoUrl: memberPhotoUrl(m, players),
-      });
+    let myFavorite: string | null = null;
+
+    if (album) {
+      const tracks = JSON.parse(album.tracks) as string[];
+      const seeded = buildRoundOne(album.seedOrder, tracks);
+
+      if (seeded.roundOne.length > 0) {
+        // Group every member's picks for this album, then derive each member's
+        // crowned champion. The champion is their favorite for this album.
+        const allPicks = await storage.listCommunityPicksForAlbum(albumId);
+        const picksByMember = new Map<number, typeof allPicks>();
+        for (const p of allPicks) {
+          const arr = picksByMember.get(p.memberId) ?? [];
+          arr.push(p);
+          picksByMember.set(p.memberId, arr);
+        }
+
+        for (const [memberId, picks] of Array.from(picksByMember.entries())) {
+          const m = memberById.get(memberId);
+          if (!m || m.blocked) continue; // hide blocked members from the crowd row
+          const champion = derivePersonalBracket(seeded, picks).champion;
+          if (!champion) continue; // bracket not finished → no favorite yet
+          if (memberId === req.session.memberId) myFavorite = champion;
+          counts[champion] = (counts[champion] ?? 0) + 1;
+          (votersBySong[champion] ??= []).push({
+            id: m.id,
+            displayName: m.displayName,
+            photoUrl: memberPhotoUrl(m, players),
+          });
+        }
+      }
     }
+
     // Stable, friendly order for each song's avatar row.
     for (const song of Object.keys(votersBySong)) {
       votersBySong[song].sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -962,10 +989,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .map(([songTitle, count]) => ({ songTitle, count, voters: votersBySong[songTitle] ?? [] }))
       .sort((a, b) => b.count - a.count);
     const total = Object.values(counts).reduce((s, n) => s + n, 0);
-    let myFavorite: string | null = null;
-    if (req.session.memberId) {
-      myFavorite = favs.find(f => f.memberId === req.session.memberId)?.songTitle ?? null;
-    }
     res.json({ total, ranked, myFavorite });
   });
 

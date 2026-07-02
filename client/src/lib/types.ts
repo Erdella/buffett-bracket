@@ -286,6 +286,47 @@ export interface AdminMemberBracket {
   favorite: string | null;
 }
 
+// ----- community: album tier ratings (S | A | B | C | D | F) -----
+export type TierGrade = "S" | "A" | "B" | "C" | "D" | "F";
+export const TIER_GRADES: TierGrade[] = ["S", "A", "B", "C", "D", "F"];
+
+// The member's own grade for one album + the community summary.
+export interface AlbumRatingData {
+  myGrade: TierGrade | null;
+  count: number;
+  minRatings: number;
+  averageGrade: TierGrade | null; // null until count >= minRatings
+  averageScore: number | null;    // raw 0-5 mean
+  distribution: Record<TierGrade, number>;
+}
+
+// One album entry in a member's personal tier list.
+export interface TierItem {
+  albumId: number;
+  title: string;
+  year: number;
+  coverUrl: string | null;
+  grade: TierGrade | null;
+}
+
+export interface MyTiersData {
+  grades: TierGrade[];
+  items: TierItem[];
+}
+
+// One album's community-average summary (used on the Results page).
+export interface AlbumAverageRating {
+  albumId: number;
+  count: number;
+  averageScore: number | null;
+  averageGrade: TierGrade | null; // null until count >= minRatings
+}
+
+export interface AllRatingsData {
+  minRatings: number;
+  ratings: AlbumAverageRating[];
+}
+
 // ----- community: per-album seeding (admin) -----
 export interface AlbumSeeds {
   // Resolved seed order, seed 1 (best) -> seed N, in slot order.

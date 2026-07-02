@@ -8,6 +8,7 @@ import { storage, db } from "./storage";
 import {
   insertPlayerSchema, insertAlbumStatusSchema,
   bracketMatches, matchVotes,
+  TIER_GRADES, TIER_WEIGHT, TIER_MIN_RATINGS, type TierGrade,
 } from "@shared/schema";
 import { sql, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -53,6 +54,17 @@ async function requestIsFamily(req: Request): Promise<boolean> {
   const m = await storage.getMember(req.session.memberId);
   if (!m || m.blocked) return false;
   return isFamilyEmail(m.email);
+}
+
+// Map a numeric tier score (0-5, where S=5 ... F=0) back to the nearest letter
+// grade. Used for the community-average grade. Rounds to nearest; a mean of
+// exactly x.5 rounds up to the better grade.
+function gradeFromScore(score: number): TierGrade {
+  // idx 0 -> S ... 5 -> F. Round half toward the BETTER (lower-idx) grade so a
+  // dead-even split like S+F (mean 2.5) lands on B rather than C.
+  const idx = Math.ceil((5 - score) - 0.5);
+  const clamped = Math.max(0, Math.min(TIER_GRADES.length - 1, idx));
+  return TIER_GRADES[clamped];
 }
 
 // Resolve the effective avatar for an OG member: their own uploaded photo wins,
@@ -132,6 +144,7 @@ const MEMBER_MUTATION_PATHS = [
   "/api/community/vote",
   "/api/community/favorite",
   "/api/community/pick",
+  "/api/community/rate",
   "/api/member/logout",
   "/api/member/profile",
   "/api/member/photo",
@@ -291,6 +304,13 @@ async function ensureSchemaAndSeed() {
     song_picked TEXT NOT NULL
   )`);
   db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_community_picks_unique ON community_bracket_picks(album_id, member_id, round, match_index)`);
+  db.run(sql`CREATE TABLE IF NOT EXISTS album_ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    album_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    grade TEXT NOT NULL
+  )`);
+  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_album_ratings_album_member ON album_ratings(album_id, member_id)`);
 
   // Seed albums if empty
   const existing = await storage.listAlbums();
@@ -1007,6 +1027,121 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const f = await storage.upsertCommunityFavorite(albumId, req.session.memberId!, songTitle);
     res.json(f);
+  });
+
+  // ========================================================================
+  // COMMUNITY: album tier ratings (S | A | B | C | D | F)
+  // ------------------------------------------------------------------------
+  // Each member gives the WHOLE album an overall grade. Grades roll up into a
+  // personal tier list (My Brackets) and a community average per album. The
+  // average is only revealed once at least TIER_MIN_RATINGS members have rated
+  // the album, so a single outlier can't define it.
+  // ========================================================================
+
+  // The signed-in member's own grade for an album + the community summary
+  // (average grade once enough ratings exist, plus the per-tier distribution).
+  app.get("/api/albums/:id/rating", async (req, res) => {
+    const albumId = Number(req.params.id);
+    const ratings = await storage.listAlbumRatings(albumId);
+
+    // Only count ratings from non-blocked members.
+    const allMembers = await storage.listMembers();
+    const okMember = new Map(allMembers.map(m => [m.id, !m.blocked]));
+    const valid = ratings.filter(r => okMember.get(r.memberId) && (TIER_GRADES as readonly string[]).includes(r.grade));
+
+    const distribution: Record<string, number> = {};
+    for (const g of TIER_GRADES) distribution[g] = 0;
+    let sum = 0;
+    for (const r of valid) {
+      distribution[r.grade] = (distribution[r.grade] ?? 0) + 1;
+      sum += TIER_WEIGHT[r.grade as TierGrade];
+    }
+    const count = valid.length;
+    const averageGrade = count >= TIER_MIN_RATINGS ? gradeFromScore(sum / count) : null;
+    const averageScore = count > 0 ? sum / count : null;
+
+    let myGrade: string | null = null;
+    if (req.session.memberId) {
+      myGrade = valid.find(r => r.memberId === req.session.memberId)?.grade
+        ?? ratings.find(r => r.memberId === req.session.memberId)?.grade
+        ?? null;
+    }
+
+    res.json({
+      myGrade,
+      count,
+      minRatings: TIER_MIN_RATINGS,
+      averageGrade,        // null until >= minRatings
+      averageScore,        // raw 0-5 mean (or null), handy for tooltips
+      distribution,        // { S: n, A: n, ... }
+    });
+  });
+
+  // Set, change, or clear the member's grade for an album. Send grade:null (or
+  // omit) to remove their rating.
+  app.post("/api/community/rate", async (req, res) => {
+    const schema = z.object({
+      albumId: z.number().int().positive(),
+      grade: z.enum(TIER_GRADES).nullable().optional(),
+    });
+    const { albumId, grade } = schema.parse(req.body);
+    const album = await storage.getAlbum(albumId);
+    if (!album) return res.status(404).json({ error: "Album not found" });
+    if (!grade) {
+      await storage.deleteAlbumRating(albumId, req.session.memberId!);
+      return res.json({ myGrade: null });
+    }
+    const r = await storage.upsertAlbumRating(albumId, req.session.memberId!, grade);
+    res.json({ myGrade: r.grade });
+  });
+
+  // The signed-in member's full tier list: every album they've graded, grouped
+  // by grade, plus the albums they haven't graded yet (the "unranked" tray).
+  app.get("/api/community/my-tiers", async (req, res) => {
+    if (!req.session.memberId) return res.status(401).json({ error: "Sign-in required" });
+    const [albumsList, mine] = await Promise.all([
+      storage.listAlbums(),
+      storage.listAlbumRatingsForMember(req.session.memberId),
+    ]);
+    const gradeByAlbum = new Map(mine.map(r => [r.albumId, r.grade]));
+    const items = albumsList
+      .slice()
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .map(a => ({
+        albumId: a.id,
+        title: a.title,
+        year: a.year,
+        coverUrl: a.coverUrl,
+        grade: gradeByAlbum.get(a.id) ?? null,
+      }));
+    res.json({ grades: TIER_GRADES, items });
+  });
+
+  // Community average grade for EVERY album in one shot (for the Results page).
+  // Each album's average is gated behind TIER_MIN_RATINGS: albums with fewer
+  // ratings report averageGrade:null so we never crown a grade off one vote.
+  app.get("/api/community/all-ratings", async (_req, res) => {
+    const [all, allMembers] = await Promise.all([
+      storage.listAllAlbumRatings(),
+      storage.listMembers(),
+    ]);
+    const okMember = new Map(allMembers.map(m => [m.id, !m.blocked]));
+    const acc = new Map<number, { sum: number; count: number }>();
+    for (const r of all) {
+      if (!okMember.get(r.memberId)) continue;
+      if (!(TIER_GRADES as readonly string[]).includes(r.grade)) continue;
+      const cur = acc.get(r.albumId) ?? { sum: 0, count: 0 };
+      cur.sum += TIER_WEIGHT[r.grade as TierGrade];
+      cur.count += 1;
+      acc.set(r.albumId, cur);
+    }
+    const ratings = Array.from(acc.entries()).map(([albumId, { sum, count }]) => ({
+      albumId,
+      count,
+      averageScore: count > 0 ? sum / count : null,
+      averageGrade: count >= TIER_MIN_RATINGS ? gradeFromScore(sum / count) : null,
+    }));
+    res.json({ minRatings: TIER_MIN_RATINGS, ratings });
   });
 
   // ========================================================================

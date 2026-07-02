@@ -1,11 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import type { Album, AlbumStatus, OGLeaderboardData } from "@/lib/types";
+import type { Album, AlbumStatus, OGLeaderboardData, AllRatingsData, TierGrade } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlbumCover } from "@/components/album-cover";
+import { TIER_STYLE, TIER_DESCRIPTION } from "@/lib/tier";
+import { cn } from "@/lib/utils";
 import { Trophy, ChevronRight, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+
+/** Small filled grade pill for the community-average tier. */
+function TierBadge({ grade, className }: { grade: TierGrade; className?: string }) {
+  const style = TIER_STYLE[grade];
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 w-6 items-center justify-center rounded font-display font-extrabold text-sm shrink-0",
+        style.chip,
+        className,
+      )}
+      title={`Community grade: ${grade} — ${TIER_DESCRIPTION[grade]}`}
+    >
+      {grade}
+    </span>
+  );
+}
 
 export default function Results() {
   const auth = useAuth();
@@ -14,14 +33,22 @@ export default function Results() {
   // Family album status is family-only — don't fetch it for outsiders.
   const statuses = useQuery<AlbumStatus[]>({ queryKey: ["/api/album-status"], enabled: isFamily });
   const og = useQuery<OGLeaderboardData>({ queryKey: ["/api/community/leaderboard"] });
+  const ratings = useQuery<AllRatingsData>({ queryKey: ["/api/community/all-ratings"] });
 
   if (!albums.data || (isFamily && !statuses.data)) {
     return <div className="text-sm text-muted-foreground">Loading...</div>;
   }
 
+  // albumId -> community average grade (only where >= min ratings).
+  const gradeByAlbum = new Map<number, TierGrade>(
+    (ratings.data?.ratings ?? [])
+      .filter(r => r.averageGrade != null)
+      .map(r => [r.albumId, r.averageGrade as TierGrade]),
+  );
+
   // Outsiders get an OG-only view: every album with its OG community winner.
   if (!isFamily) {
-    return <OGResults albums={albums.data} og={og.data} />;
+    return <OGResults albums={albums.data} og={og.data} gradeByAlbum={gradeByAlbum} />;
   }
 
   // Map albumId -> OG community winner song (may be undefined while loading).
@@ -76,6 +103,13 @@ export default function Results() {
                           <Users className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="text-sm truncate">{ogWinnerByAlbum.get(album.id)}</span>
                           <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Original</span>
+                        </div>
+                      )}
+                      {gradeByAlbum.get(album.id) && (
+                        <div className="flex items-center gap-1.5" data-testid={`avg-grade-${album.id}`}>
+                          <TierBadge grade={gradeByAlbum.get(album.id)!} className="h-4 w-4 text-[10px]" />
+                          <span className="text-sm truncate">Community grade</span>
+                          <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Tier</span>
                         </div>
                       )}
                     </div>
@@ -136,7 +170,7 @@ export default function Results() {
  * Lists every album with its OG Parrothead Madness community winner where one
  * has been crowned. No family bracket, winners, or status leak through here.
  */
-function OGResults({ albums, og }: { albums: Album[]; og?: OGLeaderboardData }) {
+function OGResults({ albums, og, gradeByAlbum }: { albums: Album[]; og?: OGLeaderboardData; gradeByAlbum: Map<number, TierGrade> }) {
   const winnerByAlbum = new Map<number, string | null>(
     (og?.albumWinners ?? []).map(w => [w.albumId, w.winner]),
   );
@@ -178,12 +212,19 @@ function OGResults({ albums, og }: { albums: Album[]; og?: OGLeaderboardData }) 
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                     </div>
-                    <div className="mt-3 pt-3 border-t border-border/60">
+                    <div className="mt-3 pt-3 border-t border-border/60 space-y-1.5">
                       <div className="flex items-center gap-1.5" data-testid={`og-winner-${album.id}`}>
                         <Trophy className="h-4 w-4 text-primary shrink-0" />
                         <span className="text-sm font-semibold truncate">{winnerByAlbum.get(album.id)}</span>
                         <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Original</span>
                       </div>
+                      {gradeByAlbum.get(album.id) && (
+                        <div className="flex items-center gap-1.5" data-testid={`avg-grade-${album.id}`}>
+                          <TierBadge grade={gradeByAlbum.get(album.id)!} className="h-4 w-4 text-[10px]" />
+                          <span className="text-sm truncate">Community grade</span>
+                          <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Tier</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -203,7 +244,10 @@ function OGResults({ albums, og }: { albums: Album[]; og?: OGLeaderboardData }) 
                   <span className="font-mono text-xs text-muted-foreground w-12 shrink-0">{album.year}</span>
                   <span className="truncate">{album.title}</span>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="flex items-center gap-2 shrink-0">
+                  {gradeByAlbum.get(album.id) && <TierBadge grade={gradeByAlbum.get(album.id)!} className="h-5 w-5 text-xs" />}
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
               </Link>
             ))}
           </CardContent>

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlbumCover } from "@/components/album-cover";
 import { AlbumArena } from "@/components/album-arena";
+import { AlbumRating } from "@/components/album-rating";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { ArrowLeft, ArrowRight, Trophy, Music, Camera, X, Eraser, Info } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -115,6 +116,10 @@ export default function AlbumDetail() {
 
       {/* Family bracket + community voting, cleanly separated by tab. */}
       <AlbumArena album={a} />
+
+      {/* Overall album tier rating (S–F). Everyone sees the community average
+          (once enough ratings exist); signed-in members can set their grade. */}
+      <AlbumRating album={a} />
 
       {/* Admin-only: reset the OG community bracket for THIS album. */}
       {auth.isAdmin && <AdminClearCommunity album={a} />}

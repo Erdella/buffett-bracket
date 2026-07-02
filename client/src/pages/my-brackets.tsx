@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { openMemberSignIn } from "@/components/member-auth-button";
+import { TierList } from "@/components/tier-list";
 import { Trophy, Hourglass, Circle, CheckCircle2, ArrowRight, ListChecks } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +86,9 @@ export default function MyBrackets() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Personal tier list — rate every album S–F, drag to reorder */}
+      <TierList />
 
       {/* In progress */}
       {inProgress.length > 0 && (

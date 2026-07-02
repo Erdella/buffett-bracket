@@ -1,7 +1,7 @@
 import {
   albums, players, settings, albumResults, albumStatus, bracketMatches, matchVotes,
   members, loginTokens, communityRound, communityVotes, communityFavorites,
-  communityBracketPicks,
+  communityBracketPicks, albumRatings,
 } from "@shared/schema";
 import type {
   Album, InsertAlbum,
@@ -11,6 +11,7 @@ import type {
   BracketMatch, InsertBracketMatch,
   MatchVote,
   Member, LoginToken, CommunityVote, CommunityFavorite, CommunityBracketPick,
+  AlbumRating,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
@@ -88,6 +89,12 @@ export interface IStorage {
   deleteCommunityFavorite(albumId: number, memberId: number): Promise<void>;
   listCommunityFavorites(albumId: number): Promise<CommunityFavorite[]>;
   listAllCommunityFavorites(): Promise<CommunityFavorite[]>;
+  // album tier ratings (S|A|B|C|D|F per album per member)
+  upsertAlbumRating(albumId: number, memberId: number, grade: string): Promise<AlbumRating>;
+  deleteAlbumRating(albumId: number, memberId: number): Promise<void>;
+  listAlbumRatings(albumId: number): Promise<AlbumRating[]>;
+  listAlbumRatingsForMember(memberId: number): Promise<AlbumRating[]>;
+  listAllAlbumRatings(): Promise<AlbumRating[]>;
   // community bracket picks (per-member personal bracket)
   listCommunityPicksForAlbum(albumId: number): Promise<CommunityBracketPick[]>;
   listCommunityPicksForMember(albumId: number, memberId: number): Promise<CommunityBracketPick[]>;
@@ -406,6 +413,32 @@ export class DatabaseStorage implements IStorage {
   }
   async listAllCommunityFavorites(): Promise<CommunityFavorite[]> {
     return db.select().from(communityFavorites).all();
+  }
+
+  // ----- album tier ratings -----
+  async upsertAlbumRating(albumId: number, memberId: number, grade: string): Promise<AlbumRating> {
+    const existing = db.select().from(albumRatings)
+      .where(and(eq(albumRatings.albumId, albumId), eq(albumRatings.memberId, memberId)))
+      .get();
+    if (existing) {
+      return db.update(albumRatings).set({ grade })
+        .where(eq(albumRatings.id, existing.id)).returning().get();
+    }
+    return db.insert(albumRatings).values({ albumId, memberId, grade }).returning().get();
+  }
+  async deleteAlbumRating(albumId: number, memberId: number): Promise<void> {
+    db.delete(albumRatings)
+      .where(and(eq(albumRatings.albumId, albumId), eq(albumRatings.memberId, memberId)))
+      .run();
+  }
+  async listAlbumRatings(albumId: number): Promise<AlbumRating[]> {
+    return db.select().from(albumRatings).where(eq(albumRatings.albumId, albumId)).all();
+  }
+  async listAlbumRatingsForMember(memberId: number): Promise<AlbumRating[]> {
+    return db.select().from(albumRatings).where(eq(albumRatings.memberId, memberId)).all();
+  }
+  async listAllAlbumRatings(): Promise<AlbumRating[]> {
+    return db.select().from(albumRatings).all();
   }
 
   // ----- community bracket picks (per-member personal bracket) -----

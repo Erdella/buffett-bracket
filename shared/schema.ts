@@ -211,3 +211,26 @@ export const communityBracketPicks = sqliteTable("community_bracket_picks", {
 });
 
 export type CommunityBracketPick = typeof communityBracketPicks.$inferSelect;
+
+// ---------- Community Album Ratings (tier list) ----------
+// One row per (album, member): that member's overall tier grade for the whole
+// album. Grade is one of S | A | B | C | D | F (S is the top tier). This is
+// separate from the per-song bracket voting above — it's how a member ranks the
+// ALBUM itself. Each member's grades roll up into a personal "tiermaker" list;
+// the community average grade per album is computed from these rows.
+export const albumRatings = sqliteTable("album_ratings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  albumId: integer("album_id").notNull(),
+  memberId: integer("member_id").notNull(),
+  grade: text("grade").notNull(), // S | A | B | C | D | F
+});
+
+export type AlbumRating = typeof albumRatings.$inferSelect;
+
+// Valid tier grades, best -> worst. Numeric weights used for the community
+// average: S=5, A=4, B=3, C=2, D=1, F=0.
+export const TIER_GRADES = ["S", "A", "B", "C", "D", "F"] as const;
+export type TierGrade = (typeof TIER_GRADES)[number];
+export const TIER_WEIGHT: Record<TierGrade, number> = { S: 5, A: 4, B: 3, C: 2, D: 1, F: 0 };
+// Minimum number of ratings before a community average grade is shown.
+export const TIER_MIN_RATINGS = 3;

@@ -93,7 +93,7 @@ export default function Home() {
             one album at a time — and letting Parrotheads vote their favorites
             head-to-head until one song from each record is crowned. Fins up.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start justify-center gap-3">
             {member ? (
               <Button
                 size="lg"

@@ -64,12 +64,7 @@ export default function Home() {
         ? "Start your next album"
         : "Go vote the current album";
 
-  const totalAlbums = albums.data?.length ?? 0;
-  const completedAlbums =
-    leaderboard.data?.albumWinners.filter((w) => !!w.winner).length ?? 0;
   const memberCount = leaderboard.data?.members.length ?? 0;
-  const progressPct =
-    totalAlbums > 0 ? Math.round((completedAlbums / totalAlbums) * 100) : 0;
 
   return (
     <div className="space-y-12 sm:space-y-16">
@@ -144,41 +139,16 @@ export default function Home() {
       </section>
 
       {/* ---------- QUICK STATS ---------- */}
-      <section className="grid grid-cols-2 gap-4">
+      {/* Ever-evolving contest with no fixed end: we surface how many
+          Parrotheads are playing, not an "X of 32 done" completion metric. */}
+      <section className="max-w-sm mx-auto">
         <Stat
           icon={<Users className="h-4 w-4" />}
           value={memberCount}
           label="Parrotheads playing"
           testId="stat-members"
         />
-        <Stat
-          icon={<Trophy className="h-4 w-4" />}
-          value={`${completedAlbums} / ${totalAlbums}`}
-          label="Albums crowned"
-          testId="stat-albums"
-        />
       </section>
-
-      {/* Discography progress */}
-      {totalAlbums > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium flex items-center gap-1.5">
-              <ListMusic className="h-4 w-4 text-secondary" /> Discography progress
-            </span>
-            <span className="text-muted-foreground" data-testid="text-progress">
-              {completedAlbums} of {totalAlbums} albums done
-            </span>
-          </div>
-          <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full sun-gradient rounded-full transition-all"
-              style={{ width: `${progressPct}%` }}
-              data-testid="bar-progress"
-            />
-          </div>
-        </section>
-      )}
 
       {/* ---------- HOW IT WORKS ---------- */}
       <section>

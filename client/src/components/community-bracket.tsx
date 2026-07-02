@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Album, MyBracketData, PersonalMatch, CommunityStandings } from "@/lib/types";
+import type { Album, MyBracketData, PersonalMatch, CommunityStandings, AlbumSeeds } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick, Hand } from "lucide-react";
+import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick } from "lucide-react";
 
 /**
  * Human label for a round given its position relative to the final round, and
@@ -30,17 +30,72 @@ export function roundLabel(round: number, totalRounds: number, hasPrelims = fals
   return `Round ${round}`;
 }
 
+/** Short, all-caps column header used on the bracket tree. */
+function roundHeader(round: number, totalRounds: number, hasPrelims: boolean): string {
+  if (hasPrelims && round === 1) return "PRELIMINARY";
+  if (round === totalRounds) return "CHAMPIONSHIP";
+  if (round === totalRounds - 1) return "SEMIFINALS";
+  if (round === totalRounds - 2) return "QUARTERFINALS";
+  if (round === totalRounds - 3) return "ROUND OF 16";
+  return `ROUND ${round}`;
+}
+
 function pointsForRound(round: number, totalRounds: number): number {
   if (round === totalRounds) return 4;
   if (round === totalRounds - 1) return 2;
   return 1;
 }
 
+// ---------------------------------------------------------------------------
+// Full-tree skeleton
+// ---------------------------------------------------------------------------
+// The server returns a JAGGED bracket: later rounds only exist once the member
+// has picked their way there. To draw the classic left-to-right tree with TBD
+// slots for every future matchup, we pad the live rounds out to `totalRounds`,
+// halving the match count each round. Live matches keep their real songs/pick;
+// padded matches are all-TBD placeholders (not yet tappable).
+
+interface TreeMatch extends PersonalMatch {
+  live: boolean; // true when this matchup is materialized (its songs are known)
+}
+
+// Number of matchups a round should have in the FINISHED bracket. Counting
+// back from the championship, the last round has 1 match, semis 2, quarters 4,
+// etc. (a power of two). Round 1 is special when the bracket has prelims: its
+// size is whatever the live round-1 data says (the play-in games), so we take
+// that from `firstCount`.
+function expectedRoundSize(round: number, totalRounds: number, hasPrelims: boolean, firstCount: number): number {
+  if (hasPrelims && round === 1) return firstCount;
+  return Math.pow(2, totalRounds - round);
+}
+
+function buildTree(rounds: PersonalMatch[][], totalRounds: number, hasPrelims: boolean): TreeMatch[][] {
+  const tree: TreeMatch[][] = [];
+  const firstCount = rounds[0]?.length ?? 0;
+  for (let r = 1; r <= totalRounds; r++) {
+    const live = rounds[r - 1];
+    if (live && live.length > 0) {
+      tree.push(live.map(m => ({ ...m, live: true })));
+      continue;
+    }
+    // Placeholder round — reserve the correct number of TBD slots so the tree
+    // shape is right even before the member has picked their way there. Real
+    // data replaces these as picks are made.
+    const count = Math.max(1, expectedRoundSize(r, totalRounds, hasPrelims, firstCount));
+    const placeholder: TreeMatch[] = [];
+    for (let i = 0; i < count; i++) {
+      placeholder.push({ round: r, matchIndex: i, songA: null, songB: null, pick: null, live: false });
+    }
+    tree.push(placeholder);
+  }
+  return tree;
+}
+
 /**
- * The community voting panel (new model). Each signed-in member fills out their
- * OWN bracket: they pick winners round by round and their picks advance on
- * their personal bracket. Below the bracket we show the live weighted standings
- * for the whole crowd.
+ * The community voting panel. Each signed-in member fills out their OWN bracket
+ * on a classic left-to-right tournament tree: they tap the song they prefer in
+ * each matchup and it advances to the next round. Below the tree we show the
+ * live weighted standings for the whole crowd.
  */
 export function CommunityBracket({ album }: { album: Album }) {
   const { member } = useAuth();
@@ -48,6 +103,12 @@ export function CommunityBracket({ album }: { album: Album }) {
 
   const myBracket = useQuery<MyBracketData>({
     queryKey: ["/api/albums", album.id, "my-bracket"],
+  });
+
+  // Seed order (public) lets us show a seed number next to every song, just
+  // like a real tournament bracket. Index 0 == seed 1 (strongest).
+  const seeds = useQuery<AlbumSeeds>({
+    queryKey: ["/api/albums", album.id, "seeds"],
   });
 
   const pickMutation = useMutation({
@@ -88,20 +149,24 @@ export function CommunityBracket({ album }: { album: Album }) {
   const bracket = myBracket.data.bracket;
   const { totalRounds, hasPrelims } = bracket;
 
-  // First-timer hint: if a signed-in member hasn't made a single pick on this
-  // bracket yet, pulse a "tap here" cue on the very first real (non-bye) matchup
-  // so they know exactly where to start. The moment they pick anything, this
-  // flips false and the hint disappears.
+  // seedOf: 1-based seed number for a song title (undefined when unknown).
+  const seedOf = (song: string | null): number | undefined => {
+    if (!song || !seeds.data) return undefined;
+    const i = seeds.data.seedOrder.indexOf(song);
+    return i >= 0 ? i + 1 : undefined;
+  };
+
+  const tree = buildTree(bracket.rounds, totalRounds, hasPrelims);
+
+  // First-timer hint: the earliest live, un-picked, real (non-bye) matchup.
   const hasAnyPick = bracket.rounds.some(matches => matches.some(m => !!m.pick));
-  let hintRound: number | null = null;
-  let hintMatchIndex: number | null = null;
+  let hintKey: string | null = null;
   if (member && !hasAnyPick) {
-    outer: for (let ri = 0; ri < bracket.rounds.length; ri++) {
-      for (const m of bracket.rounds[ri]) {
+    outer: for (const round of tree) {
+      for (const m of round) {
         const isBye = (!!m.songA && !m.songB) || (!!m.songB && !m.songA);
-        if (!isBye) {
-          hintRound = ri + 1;
-          hintMatchIndex = m.matchIndex;
+        if (m.live && !isBye && !m.pick) {
+          hintKey = `${m.round}-${m.matchIndex}`;
           break outer;
         }
       }
@@ -140,9 +205,9 @@ export function CommunityBracket({ album }: { album: Album }) {
           <CardContent className="py-3.5 flex items-start gap-3">
             <MousePointerClick className="h-5 w-5 text-primary shrink-0 mt-0.5" />
             <p className="text-sm leading-snug">
-              <strong>How to vote:</strong> in each matchup below, tap the song you like better
-              of the two. Your pick advances to the next round — keep going until one song is
-              crowned your champion.
+              <strong>How to vote:</strong> tap the song you like better in each matchup. Your pick
+              advances to the next round, and the bracket fills in to the right — keep going until one
+              song reaches the championship.
             </p>
           </CardContent>
         </Card>
@@ -161,46 +226,21 @@ export function CommunityBracket({ album }: { album: Album }) {
         </Card>
       )}
 
-      {/* Round-by-round personal bracket */}
-      <div className="space-y-5">
-        {bracket.rounds.map((matches, ri) => {
-          const round = ri + 1;
-          const pts = pointsForRound(round, totalRounds);
-          return (
-            <div key={round} className="space-y-3" data-testid={`round-${round}`}>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-display font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>
-                    {roundLabel(round, totalRounds, hasPrelims)}
-                  </h3>
-                  <Badge variant="secondary" className="text-[10px] gap-1">
-                    <Trophy className="h-3 w-3" /> {pts} {pts === 1 ? "pt" : "pts"} / pick
-                  </Badge>
-                </div>
-                {member && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Tap your favorite song in each matchup below.
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-3">
-                {matches.map(m => (
-                  <PersonalMatchCard
-                    key={`${round}-${m.matchIndex}`}
-                    match={m}
-                    canPick={!!member}
-                    pending={pickMutation.isPending}
-                    showHint={round === hintRound && m.matchIndex === hintMatchIndex}
-                    onPick={(song) =>
-                      pickMutation.mutate({ round, matchIndex: m.matchIndex, songPicked: song })
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* The bracket tree. Horizontally scrollable on narrow screens so the full
+          left-to-right layout stays intact on phones. */}
+      <BracketTree
+        tree={tree}
+        totalRounds={totalRounds}
+        hasPrelims={hasPrelims}
+        champion={bracket.complete ? bracket.champion : null}
+        canPick={!!member}
+        pending={pickMutation.isPending}
+        hintKey={hintKey}
+        seedOf={seedOf}
+        onPick={(round, matchIndex, song) =>
+          pickMutation.mutate({ round, matchIndex, songPicked: song })
+        }
+      />
 
       {/* Live weighted standings for the whole crowd */}
       <CommunityStandingsPanel album={album} />
@@ -208,147 +248,264 @@ export function CommunityBracket({ album }: { album: Album }) {
   );
 }
 
-function PersonalMatchCard({
-  match, canPick, pending, showHint = false, onPick,
+// ---------------------------------------------------------------------------
+// Bracket tree
+// ---------------------------------------------------------------------------
+
+function BracketTree({
+  tree, totalRounds, hasPrelims, champion, canPick, pending, hintKey, seedOf, onPick,
 }: {
-  match: PersonalMatch;
+  tree: TreeMatch[][];
+  totalRounds: number;
+  hasPrelims: boolean;
+  champion: string | null;
   canPick: boolean;
   pending: boolean;
-  showHint?: boolean;
-  onPick: (song: string) => void;
+  hintKey: string | null;
+  seedOf: (song: string | null) => number | undefined;
+  onPick: (round: number, matchIndex: number, song: string) => void;
 }) {
-  const { songA, songB, pick } = match;
-  // A bye (single song) just carries forward — no choice to make.
-  const isBye = (!!songA && !songB) || (!!songB && !songA);
-  const byeSong = songA || songB;
-
-  if (isBye) {
-    return (
-      <Card className="border-card-border bg-muted/30">
-        <CardContent className="p-3 sm:p-4 flex items-center justify-between gap-2">
-          <span className="font-medium text-sm">{byeSong}</span>
-          <Badge variant="outline" className="text-[10px]">Bye — advances</Badge>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const hasPick = !!pick;
-  // Only ever hint on an unpicked, tappable matchup.
-  const hinting = showHint && canPick && !hasPick;
-
   return (
-    <Card
-      className={cn(
-        "relative overflow-visible transition-colors",
-        hasPick ? "border-primary/40 bg-primary/[0.03]" : "border-card-border bg-muted/40",
-        hinting && "border-primary ring-2 ring-primary/60",
-      )}
-      data-testid={`match-${match.round}-${match.matchIndex}`}
+    <div
+      className="relative overflow-x-auto rounded-xl border border-card-border bg-muted/20 p-4 sm:p-6"
+      data-testid="bracket-tree"
     >
-      {/* First-timer cue: a soft pulsing ring + a bouncing "Start here" tag. */}
-      {hinting && (
-        <>
-          <span
-            className="pointer-events-none absolute -inset-px rounded-xl ring-2 ring-primary/50 animate-ping"
-            aria-hidden
-          />
-          <span
-            className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-primary-foreground shadow-md animate-bounce whitespace-nowrap"
-            data-testid={`hint-${match.round}-${match.matchIndex}`}
-          >
-            <Hand className="h-3 w-3" /> Start here — tap a song
-          </span>
-        </>
-      )}
+      <div className="flex items-stretch min-w-max">
+        {tree.map((matches, ri) => {
+          const round = ri + 1;
+          const pts = pointsForRound(round, totalRounds);
+          const isLast = round === totalRounds;
+          const isFirst = ri === 0;
+          return (
+            <div key={round} className="flex items-stretch">
+              {/* Connector column feeding INTO this round from the previous one.
+                  Each next-round matchup is joined to its two feeders by an
+                  elbow: two horizontal stubs, a vertical span between them, and
+                  a horizontal line out to this column. */}
+              {!isFirst && (
+                <Connectors count={matches.length} headerOffset />
+              )}
 
-      <CardContent className="p-3 sm:p-4">
-        {/* Tiny status line so it's obvious whether this matchup still needs a tap. */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground whitespace-nowrap">
-            Matchup
-          </span>
-          {canPick && (
-            hasPick ? (
-              <span className="text-[10px] font-semibold text-primary inline-flex items-center gap-1" data-testid={`status-${match.round}-${match.matchIndex}`}>
-                <Check className="h-3 w-3" /> Your pick
-              </span>
-            ) : (
-              <span className="text-[10px] font-semibold text-muted-foreground" data-testid={`status-${match.round}-${match.matchIndex}`}>
-                Tap one ↓
-              </span>
-            )
-          )}
-        </div>
+              <div
+                className="flex flex-col min-w-[210px]"
+                data-testid={`tree-round-${round}`}
+              >
+                {/* Column header */}
+                <div className="mb-3 h-6 flex items-center gap-2 flex-wrap">
+                  <span
+                    className={cn(
+                      "text-[11px] font-bold uppercase tracking-[0.15em]",
+                      isLast ? "text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    {roundHeader(round, totalRounds, hasPrelims)}
+                    {isLast && " 🏆"}
+                  </span>
+                  <Badge variant="secondary" className="text-[9px] gap-1 px-1.5 py-0">
+                    <Trophy className="h-2.5 w-2.5" /> {pts}{pts === 1 ? "pt" : "pts"}
+                  </Badge>
+                </div>
 
-        {/* Two options with a "vs" between them. On mobile they stack with a
-            horizontal vs divider; on desktop they sit side by side with a vs chip. */}
-        <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-6 items-center">
-          <PickOption
-            label={songA}
-            selected={pick === songA}
-            canPick={canPick}
-            pending={pending}
-            testId={`pick-a-${match.round}-${match.matchIndex}`}
-            onClick={() => songA && onPick(songA)}
-          />
+                {/* Matchups evenly distributed so a later matchup aligns with
+                    the midpoint of its two feeder matchups. */}
+                <div className="flex flex-1 flex-col justify-around gap-6">
+                  {matches.map(m => (
+                    <TreeMatchCard
+                      key={`${round}-${m.matchIndex}`}
+                      match={m}
+                      isChampionshipWinner={isLast && !!champion}
+                      champion={champion}
+                      canPick={canPick}
+                      pending={pending}
+                      hinting={hintKey === `${round}-${m.matchIndex}`}
+                      seedOf={seedOf}
+                      onPick={(song) => onPick(round, m.matchIndex, song)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
-          {/* Mobile: vs sits between the stacked rows. */}
-          <div className="sm:hidden flex items-center gap-2 py-0.5" aria-hidden>
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">vs</span>
-            <div className="h-px flex-1 bg-border" />
+        {/* Connector into the trophy, then the trophy/champion column. */}
+        <Connectors count={1} headerOffset />
+        <div className="flex flex-col min-w-[150px]">
+          <div className="mb-3 h-6" />
+          <div className="flex flex-1 items-center">
+            <div
+              className={cn(
+                "w-full rounded-lg border p-4 text-center transition-colors",
+                champion ? "border-primary bg-primary/10" : "border-dashed border-border bg-background/40",
+              )}
+              data-testid="tree-champion"
+            >
+              <Crown className={cn("h-6 w-6 mx-auto mb-1.5", champion ? "text-primary" : "text-muted-foreground/40")} />
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                Your champion
+              </div>
+              <div className="font-display font-bold text-sm mt-0.5 leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+                {champion ?? <span className="italic font-normal text-muted-foreground">TBD</span>}
+              </div>
+            </div>
           </div>
-
-          {/* Desktop: vs chip centered between the two columns. */}
-          <span
-            className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-[10px] font-bold uppercase tracking-wider text-muted-foreground shadow-sm"
-            aria-hidden
-          >
-            vs
-          </span>
-
-          <PickOption
-            label={songB}
-            selected={pick === songB}
-            canPick={canPick}
-            pending={pending}
-            testId={`pick-b-${match.round}-${match.matchIndex}`}
-            onClick={() => songB && onPick(songB)}
-          />
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
-function PickOption({
-  label, selected, canPick, pending, testId, onClick,
+/**
+ * The connector column between two rounds. It contains `count` elbow cells —
+ * one per matchup in the round on the RIGHT. Each elbow joins the vertical
+ * span between a pair of feeder matchups (left) to a single outgoing line at
+ * their midpoint (right), producing the classic bracket "⊐" shape.
+ *
+ * The connector column uses the same `justify-around` distribution as the
+ * round columns, and `headerOffset` reserves the header height (h-6 + mb-3 =
+ * 1.5rem + 0.75rem) so the elbows line up with the cards, not the headers.
+ */
+function Connectors({ count, headerOffset }: { count: number; headerOffset?: boolean }) {
+  return (
+    <div className="flex flex-col w-6 sm:w-9 shrink-0" aria-hidden>
+      {headerOffset && <div className="mb-3 h-6" />}
+      <div className="flex flex-1 flex-col justify-around">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="relative flex-1 min-h-[3rem]">
+            {/* Top half: right + bottom border forms the top arm + the vertical
+                riser's upper portion. */}
+            <div className="absolute left-0 right-1/2 top-0 h-1/2 border-r border-border" />
+            {/* Bottom half: right border continues the vertical riser downward. */}
+            <div className="absolute left-0 right-1/2 top-1/2 h-1/2 border-r border-border" />
+            {/* Outgoing horizontal line at the vertical midpoint. */}
+            <div className="absolute left-1/2 right-0 top-1/2 border-t border-border" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TreeMatchCard({
+  match, champion, isChampionshipWinner, canPick, pending, hinting, seedOf, onPick,
 }: {
-  label: string | null;
-  selected: boolean;
+  match: TreeMatch;
+  champion: string | null;
+  isChampionshipWinner: boolean;
   canPick: boolean;
   pending: boolean;
+  hinting: boolean;
+  seedOf: (song: string | null) => number | undefined;
+  onPick: (song: string) => void;
+}) {
+  const { songA, songB, pick, live } = match;
+  const hasPick = !!pick;
+
+  return (
+    <div
+      className={cn(
+        "relative rounded-lg border overflow-hidden transition-colors",
+        hasPick ? "border-primary/50" : "border-card-border",
+        hinting && "ring-2 ring-primary/70",
+      )}
+      data-testid={`match-${match.round}-${match.matchIndex}`}
+    >
+      {hinting && canPick && (
+        <span
+          className="pointer-events-none absolute -inset-px rounded-lg ring-2 ring-primary/50 animate-pulse"
+          aria-hidden
+        />
+      )}
+      <TreeSlot
+        song={songA}
+        seed={seedOf(songA)}
+        selected={pick === songA}
+        dimmed={hasPick && pick !== songA}
+        live={live}
+        canPick={canPick}
+        pending={pending}
+        isChampionshipWinner={isChampionshipWinner && pick === songA}
+        testId={`pick-a-${match.round}-${match.matchIndex}`}
+        onClick={() => songA && onPick(songA)}
+      />
+      <div className="h-px bg-card-border" aria-hidden />
+      <TreeSlot
+        song={songB}
+        seed={seedOf(songB)}
+        selected={pick === songB}
+        dimmed={hasPick && pick !== songB}
+        live={live}
+        canPick={canPick}
+        pending={pending}
+        isChampionshipWinner={isChampionshipWinner && pick === songB}
+        testId={`pick-b-${match.round}-${match.matchIndex}`}
+        onClick={() => songB && onPick(songB)}
+      />
+    </div>
+  );
+}
+
+function TreeSlot({
+  song, seed, selected, dimmed, live, canPick, pending, isChampionshipWinner, testId, onClick,
+}: {
+  song: string | null;
+  seed: number | undefined;
+  selected: boolean;
+  dimmed: boolean;
+  live: boolean;
+  canPick: boolean;
+  pending: boolean;
+  isChampionshipWinner: boolean;
   testId: string;
   onClick: () => void;
 }) {
-  if (!label) return <div className="hidden sm:block" />;
+  // A TBD slot: no song known yet (future round, or a bye's empty side).
+  if (!song) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/30 min-h-[2.75rem]">
+        <span className="italic text-sm text-muted-foreground/60">TBD</span>
+      </div>
+    );
+  }
+
+  const tappable = canPick && live && !pending;
+
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!canPick || pending}
+      disabled={!tappable}
       data-testid={testId}
       aria-pressed={selected}
       className={cn(
-        "relative w-full text-left rounded-lg border p-3 transition-colors",
-        "min-h-[3.25rem] flex items-center justify-between gap-2",
-        selected ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-border bg-background",
-        canPick && !pending ? "hover-elevate active-elevate cursor-pointer" : "cursor-default",
+        "w-full text-left flex items-center gap-2 px-3 py-2.5 min-h-[2.75rem] transition-colors",
+        selected
+          ? "bg-primary/15"
+          : dimmed
+            ? "bg-background/40"
+            : "bg-background",
+        tappable && !selected && "hover-elevate cursor-pointer",
+        !tappable && "cursor-default",
       )}
     >
-      <span className="font-medium text-sm leading-snug pr-2">{label}</span>
-      {selected && <Check className="h-4 w-4 text-primary shrink-0" />}
+      {seed !== undefined && (
+        <span className="text-[11px] font-mono text-muted-foreground w-5 shrink-0 tabular-nums">
+          {seed}
+        </span>
+      )}
+      <span
+        className={cn(
+          "flex-1 text-sm leading-snug truncate",
+          selected ? "font-semibold text-foreground" : dimmed ? "text-muted-foreground" : "font-medium",
+        )}
+      >
+        {song}
+      </span>
+      {isChampionshipWinner ? (
+        <Crown className="h-4 w-4 text-primary shrink-0" />
+      ) : selected ? (
+        <Check className="h-4 w-4 text-primary shrink-0" />
+      ) : null}
     </button>
   );
 }

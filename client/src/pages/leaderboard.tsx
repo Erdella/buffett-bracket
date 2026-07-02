@@ -36,7 +36,7 @@ export default function Leaderboard() {
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Leaderboard</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {effectiveView === "family" ? "Whose taste matches the family?" : "How The Original Parrothead Madness crowd stacks up."}
+          {effectiveView === "family" ? "Whose taste matches the family?" : "How the Hardcore Parrotheads crowd stacks up."}
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export default function Leaderboard() {
               view === "og" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover-elevate",
             )}
           >
-            The Original Parrothead Madness!
+            Hardcore Parrotheads!
           </button>
         </div>
       )}
@@ -474,7 +474,7 @@ function OGView() {
     return (
       <Card>
         <CardContent className="p-6 text-sm text-muted-foreground italic">
-          No Original Parrothead Madness members have joined yet. Once people sign in and fill out brackets, their stats appear here.
+          No Hardcore Parrotheads members have joined yet. Once people sign in and fill out brackets, their stats appear here.
         </CardContent>
       </Card>
     );
@@ -654,7 +654,7 @@ function OGView() {
 
       {/* Jolly Mon Gallery — top 5 by consensus */}
       <section data-testid="section-og-jolly-mon">
-        <SectionHeader icon={Sparkles} title="The Jolly Mon Gallery" hint="The 5 most consensus-aligned members of The Original Parrothead Madness crowd." />
+        <SectionHeader icon={Sparkles} title="The Jolly Mon Gallery" hint="The 5 most consensus-aligned members of the Hardcore Parrotheads crowd." />
         {topConsensus.length === 0 ? (
           <div className="text-sm text-muted-foreground italic">No picks yet.</div>
         ) : (
@@ -696,9 +696,9 @@ function OGView() {
 
       {/* OG album winners */}
       <section>
-        <SectionHeader icon={Trophy} title="The Original Parrothead Madness Album Winners" />
+        <SectionHeader icon={Trophy} title="Hardcore Parrotheads Album Winners" />
         {ogWinners.length === 0 ? (
-          <div className="text-sm text-muted-foreground italic">No Original Parrothead Madness winners yet — once enough brackets are filled, winners appear here.</div>
+          <div className="text-sm text-muted-foreground italic">No Hardcore Parrotheads winners yet — once enough brackets are filled, winners appear here.</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {ogWinners.map(w => (

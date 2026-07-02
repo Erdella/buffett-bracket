@@ -239,7 +239,7 @@ function AdminClearCommunity({ album }: { album: Album }) {
       queryClient.invalidateQueries();
       const { picks, favorites } = data.removed;
       toast({
-        title: "Original bracket cleared",
+        title: "Hardcore Parrotheads bracket cleared",
         description: `Removed ${picks} bracket ${picks === 1 ? "pick" : "picks"} and ${favorites} favorite ${favorites === 1 ? "song" : "songs"} for ${album.title}.`,
       });
     },
@@ -252,10 +252,10 @@ function AdminClearCommunity({ album }: { album: Album }) {
       <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold flex items-center gap-1.5">
-            <Eraser className="h-4 w-4 text-destructive" /> Admin · Clear Original bracket
+            <Eraser className="h-4 w-4 text-destructive" /> Admin · Clear Hardcore Parrotheads bracket
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Wipes every Original Parrothead Madness member's picks and favorites for <strong>{album.title}</strong>. The family bracket is not affected.
+            Wipes every Hardcore Parrotheads member's picks and favorites for <strong>{album.title}</strong>. The family bracket is not affected.
           </p>
         </div>
         <Button
@@ -264,13 +264,13 @@ function AdminClearCommunity({ album }: { album: Album }) {
           className="text-destructive border-destructive/40 hover:text-destructive shrink-0"
           disabled={clear.isPending}
           onClick={() => {
-            if (confirm(`Clear ALL Original Parrothead Madness picks and favorites for "${album.title}"? This can't be undone. The family bracket stays as-is.`)) {
+            if (confirm(`Clear ALL Hardcore Parrotheads picks and favorites for "${album.title}"? This can't be undone. The family bracket stays as-is.`)) {
               clear.mutate();
             }
           }}
           data-testid={`button-clear-community-${album.id}`}
         >
-          <Eraser className="h-4 w-4 mr-1.5" /> {clear.isPending ? "Clearing…" : "Clear Original bracket"}
+          <Eraser className="h-4 w-4 mr-1.5" /> {clear.isPending ? "Clearing…" : "Clear Hardcore Parrotheads bracket"}
         </Button>
       </CardContent>
     </Card>

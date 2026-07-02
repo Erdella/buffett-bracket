@@ -27,7 +27,7 @@ export function AdminCommunity({ albums: _albums }: { albums: Album[] }) {
         <CardContent className="p-5 sm:p-6 space-y-3">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-primary" />
-            <div className="font-semibold">The Original Parrothead Madness — How voting works</div>
+            <div className="font-semibold">Hardcore Parrotheads — How voting works</div>
           </div>
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2 text-sm">
             <p className="flex items-start gap-2">
@@ -45,8 +45,8 @@ export function AdminCommunity({ albums: _albums }: { albums: Album[] }) {
               The song with the most points wins; ties are listed alphabetically.
             </p>
             <p className="text-muted-foreground">
-              These Original Parrothead Madness results stay completely separate from the family bracket — both show side by
-              side under the Family / The Original Parrothead Madness tabs on each album.
+              These Hardcore Parrotheads results stay completely separate from the family bracket — both show side by
+              side under the Family / Hardcore Parrotheads tabs on each album.
             </p>
           </div>
         </CardContent>
@@ -130,7 +130,7 @@ function SeedingEditor({ albums }: { albums: Album[] }) {
       queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "seeds"] });
       queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "my-bracket"] });
       queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "community-standings"] });
-      toast({ title: "Seeding saved", description: "The Original Parrothead Madness bracket now uses this order." });
+      toast({ title: "Seeding saved", description: "Hardcore Parrotheads bracket now uses this order." });
     },
     onError: (e: Error) =>
       toast({ title: "Couldn't save seeding", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
@@ -145,7 +145,7 @@ function SeedingEditor({ albums }: { albums: Album[] }) {
         <div className="flex items-center gap-2">
           <ListOrdered className="h-4 w-4 text-primary" />
           <div>
-            <div className="font-semibold">The Original Parrothead Madness bracket seeding</div>
+            <div className="font-semibold">Hardcore Parrotheads bracket seeding</div>
             <p className="text-xs text-muted-foreground">
               Rank each album's songs from best (seed 1) to worst. The app builds a seeded
               play-in bracket: top seeds wait in the main round, the lowest seeds play in first.
@@ -347,7 +347,7 @@ function MemberManagement() {
         <div className="flex items-center gap-2">
           <Mail className="h-4 w-4 text-primary" />
           <div>
-            <div className="font-semibold">The Original Parrothead Madness Members</div>
+            <div className="font-semibold">Hardcore Parrotheads Members</div>
             <p className="text-xs text-muted-foreground">Everyone who's signed in with a magic link. Block anyone who shouldn't be voting, or wipe a member's picks to reset them.</p>
           </div>
         </div>
@@ -408,7 +408,7 @@ function MemberManagement() {
                   className="text-destructive hover:text-destructive"
                   disabled={clearDataMutation.isPending || m.voteCount === 0}
                   onClick={() => {
-                    if (confirm(`Delete ALL of ${m.displayName || m.email}'s Original Parrothead Madness picks and favorites across every album? This can't be undone. Their account stays, so they can play again.`)) {
+                    if (confirm(`Delete ALL of ${m.displayName || m.email}'s Hardcore Parrotheads picks and favorites across every album? This can't be undone. Their account stays, so they can play again.`)) {
                       clearDataMutation.mutate(m.id);
                     }
                   }}

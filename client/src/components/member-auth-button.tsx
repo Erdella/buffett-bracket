@@ -212,7 +212,7 @@ export function MemberAuthButton() {
             <DialogHeader>
               <DialogTitle>Edit profile</DialogTitle>
               <DialogDescription>
-                Your name and photo show on The Original Parrothead Madness standings. Changes update everywhere you've voted.
+                Your name and photo show on Hardcore Parrotheads standings. Changes update everywhere you've voted.
               </DialogDescription>
             </DialogHeader>
 

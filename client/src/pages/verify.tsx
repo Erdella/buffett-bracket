@@ -138,7 +138,7 @@ export default function Verify() {
                   You're in!
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  What should we call you? This is the name shown on The Original Parrothead Madness standings.
+                  What should we call you? This is the name shown on Hardcore Parrotheads standings.
                 </p>
               </div>
               <div className="space-y-1.5">

@@ -102,7 +102,7 @@ export default function Results() {
                         <div className="flex items-center gap-1.5" data-testid={`og-winner-${album.id}`}>
                           <Users className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="text-sm truncate">{ogWinnerByAlbum.get(album.id)}</span>
-                          <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Original</span>
+                          <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Parrotheads</span>
                         </div>
                       )}
                       {gradeByAlbum.get(album.id) && (
@@ -181,13 +181,13 @@ function OGResults({ albums, og, gradeByAlbum }: { albums: Album[]; og?: OGLeade
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Album by Album</h1>
-        <p className="text-sm text-muted-foreground mt-1">The Original Parrothead Madness winner for every album.</p>
+        <p className="text-sm text-muted-foreground mt-1">The Hardcore Parrotheads winner for every album.</p>
       </div>
 
       <Card>
         <CardContent className="p-4 sm:p-5">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold flex items-center gap-1.5"><Users className="h-4 w-4 text-secondary" /> Original winners crowned</div>
+            <div className="text-sm font-semibold flex items-center gap-1.5"><Users className="h-4 w-4 text-secondary" /> Parrotheads winners crowned</div>
             <div className="text-sm text-muted-foreground">{crowned.length} of {ordered.length} albums</div>
           </div>
         </CardContent>
@@ -216,7 +216,7 @@ function OGResults({ albums, og, gradeByAlbum }: { albums: Album[]; og?: OGLeade
                       <div className="flex items-center gap-1.5" data-testid={`og-winner-${album.id}`}>
                         <Trophy className="h-4 w-4 text-primary shrink-0" />
                         <span className="text-sm font-semibold truncate">{winnerByAlbum.get(album.id)}</span>
-                        <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Original</span>
+                        <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Parrotheads</span>
                       </div>
                       {gradeByAlbum.get(album.id) && (
                         <div className="flex items-center gap-1.5" data-testid={`avg-grade-${album.id}`}>

@@ -81,7 +81,7 @@ export default function Home() {
           <Badge
             className="mb-4 text-[11px] uppercase tracking-wider bg-[hsl(195_50%_12%)] text-white border-transparent hover:bg-[hsl(195_50%_12%)]"
           >
-            <Sparkles className="h-3 w-3 mr-1" /> The Original Parrothead Madness!
+            <Sparkles className="h-3 w-3 mr-1" /> Hardcore Parrotheads!
           </Badge>
           <h1
             className="font-display font-bold leading-[1.05] mb-4 text-[hsl(195_50%_12%)]"
@@ -230,7 +230,7 @@ export default function Home() {
           Run your own bracket
         </h2>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto mb-3">
-          The Original Parrothead Madness members each play their own bracket from the
+          Hardcore Parrotheads members each play their own bracket from the
           same seed order. We track champion accuracy, how often your picks
           match the crowd, and who agrees with whom — all on the leaderboard.
         </p>

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Album, MyBracketData, PersonalMatch, CommunityStandings, AlbumSeeds, MainSlot } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick } from "lucide-react";
+import { Check, Trophy, Crown, ListOrdered, CheckCircle2, Vote, MousePointerClick, ChevronRight } from "lucide-react";
 
 /**
  * Human label for a round given its position relative to the final round, and
@@ -306,11 +307,44 @@ function BracketTree({
   seedOf: (song: string | null) => number | undefined;
   onPick: (round: number, matchIndex: number, song: string) => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether the tree overflows horizontally (there's more to see to the right)
+  // and whether the user has scrolled all the way to the right edge yet.
+  const [overflowing, setOverflowing] = useState(false);
+  const [atEnd, setAtEnd] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const canScroll = el.scrollWidth - el.clientWidth > 4;
+      setOverflowing(canScroll);
+      // "At end" once within a few px of the far right (or nothing to scroll).
+      setAtEnd(!canScroll || el.scrollLeft >= el.scrollWidth - el.clientWidth - 8);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    // Recompute when the viewport (and thus overflow) changes.
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [tree.length]);
+
+  // Show the swipe hint only while there's hidden content to the right.
+  const showHint = overflowing && !atEnd;
+
   return (
-    <div
-      className="relative overflow-x-auto rounded-xl border border-card-border bg-muted/20 p-4 sm:p-6"
-      data-testid="bracket-tree"
-    >
+    <div className="relative" data-testid="bracket-tree-wrapper">
+      <div
+        ref={scrollRef}
+        className="relative overflow-x-auto rounded-xl border border-card-border bg-muted/20 p-4 sm:p-6"
+        data-testid="bracket-tree"
+      >
       <div className="flex items-stretch min-w-max">
         {tree.map((matches, ri) => {
           const round = ri + 1;
@@ -391,6 +425,35 @@ function BracketTree({
             </div>
           </div>
         </div>
+      </div>
+      </div>
+
+      {/* Right-edge fade: a soft gradient hinting there's more bracket to the
+          right. Fades out once the user reaches the end. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl",
+          "bg-gradient-to-l from-background/90 to-transparent",
+          "transition-opacity duration-300",
+          showHint ? "opacity-100" : "opacity-0",
+        )}
+      />
+
+      {/* Swipe hint pill: tells members the bracket scrolls sideways to reach
+          later rounds. Auto-hides once they've scrolled to the end. */}
+      <div
+        className={cn(
+          "pointer-events-none absolute bottom-2 right-2 sm:bottom-3 sm:right-3",
+          "transition-opacity duration-300",
+          showHint ? "opacity-100" : "opacity-0",
+        )}
+        data-testid="swipe-hint"
+      >
+        <span className="inline-flex items-center gap-1 rounded-full bg-primary/90 text-primary-foreground px-2.5 py-1 text-[11px] font-medium shadow-md">
+          Swipe for later rounds
+          <ChevronRight className="h-3.5 w-3.5 animate-pulse" />
+        </span>
       </div>
     </div>
   );

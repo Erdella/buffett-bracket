@@ -328,6 +328,13 @@ export interface AllRatingsData {
 }
 
 // ----- community: per-album seeding (admin) -----
+
+// A slot in the first main round (quarterfinals): either a directly-seeded
+// (bye) song, or the winner of a specific prelim game (not yet known).
+export type MainSlot =
+  | { kind: "direct"; song: string }
+  | { kind: "prelimWinner"; prelimIndex: number };
+
 export interface AlbumSeeds {
   // Resolved seed order, seed 1 (best) -> seed N, in slot order.
   seedOrder: string[];
@@ -337,4 +344,8 @@ export interface AlbumSeeds {
   hasPrelims: boolean;
   prelimGames: number;
   roundOne: { songA: string | null; songB: string | null }[];
+  // Slots for the first main round in slot order (pairs form matchups). Lets
+  // the UI pre-fill the bye song in each quarterfinal before prelims decide.
+  // Empty when the album has no prelims.
+  mainSlots: MainSlot[];
 }

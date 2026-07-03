@@ -1289,6 +1289,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       hasPrelims: seeded.hasPrelims,
       prelimGames: seeded.hasPrelims ? seeded.roundOne.length : 0,
       roundOne: seeded.roundOne,
+      // How the first main round (quarterfinals) is assembled: a flat list of
+      // slots in slot order where consecutive pairs form the matchups. Each
+      // slot is either a directly-seeded (bye) song or the winner of a prelim
+      // game. Lets the UI pre-fill the bye song in each quarterfinal before the
+      // prelims are decided. Empty when the album has no prelims.
+      mainSlots: seeded.mainSlots,
     });
   });
 

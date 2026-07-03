@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Album, MyBracketData, PersonalMatch, CommunityStandings, AlbumSeeds } from "@/lib/types";
+import type { Album, MyBracketData, PersonalMatch, CommunityStandings, AlbumSeeds, MainSlot } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -69,18 +69,59 @@ function expectedRoundSize(round: number, totalRounds: number, hasPrelims: boole
   return Math.pow(2, totalRounds - round);
 }
 
-function buildTree(rounds: PersonalMatch[][], totalRounds: number, hasPrelims: boolean): TreeMatch[][] {
+/**
+ * Build the first-main-round (quarterfinals) PLACEHOLDER matchups from the
+ * album's `mainSlots`, pre-filling the directly-seeded "bye" song in each
+ * matchup while leaving the prelim-winner slot as TBD (null) until that prelim
+ * is decided. Consecutive slot pairs (0,1),(2,3),... form the matchups. These
+ * are NOT live (not tappable) — they're a preview so members can see which top
+ * seed is waiting for them. The server replaces them with the real live round
+ * once the member has decided every feeding prelim.
+ */
+function placeholderMainRound(round: number, mainSlots: MainSlot[]): TreeMatch[] {
+  const matches: TreeMatch[] = [];
+  for (let i = 0; i < mainSlots.length; i += 2) {
+    const a = mainSlots[i];
+    const b = mainSlots[i + 1];
+    const songOf = (s: MainSlot | undefined): string | null =>
+      s && s.kind === "direct" ? s.song : null;
+    matches.push({
+      round,
+      matchIndex: matches.length,
+      songA: songOf(a),
+      songB: songOf(b),
+      pick: null,
+      live: false,
+    });
+  }
+  return matches;
+}
+
+function buildTree(
+  rounds: PersonalMatch[][],
+  totalRounds: number,
+  hasPrelims: boolean,
+  mainSlots: MainSlot[],
+): TreeMatch[][] {
   const tree: TreeMatch[][] = [];
   const firstCount = rounds[0]?.length ?? 0;
+  // The first main round is round 2 when there are prelims, else round 1.
+  const firstMainRound = hasPrelims ? 2 : 1;
   for (let r = 1; r <= totalRounds; r++) {
     const live = rounds[r - 1];
     if (live && live.length > 0) {
       tree.push(live.map(m => ({ ...m, live: true })));
       continue;
     }
-    // Placeholder round — reserve the correct number of TBD slots so the tree
-    // shape is right even before the member has picked their way there. Real
-    // data replaces these as picks are made.
+    // Quarterfinals not yet live: pre-fill the bye (direct-seed) song in each
+    // matchup so the top seeds are visible while their prelim opponents are
+    // still TBD. Only applies when we actually have mainSlots (prelim albums).
+    if (r === firstMainRound && hasPrelims && mainSlots.length > 0) {
+      tree.push(placeholderMainRound(r, mainSlots));
+      continue;
+    }
+    // Otherwise reserve the correct number of all-TBD slots so the tree shape
+    // is right even before the member has picked their way there.
     const count = Math.max(1, expectedRoundSize(r, totalRounds, hasPrelims, firstCount));
     const placeholder: TreeMatch[] = [];
     for (let i = 0; i < count; i++) {
@@ -156,7 +197,7 @@ export function CommunityBracket({ album }: { album: Album }) {
     return i >= 0 ? i + 1 : undefined;
   };
 
-  const tree = buildTree(bracket.rounds, totalRounds, hasPrelims);
+  const tree = buildTree(bracket.rounds, totalRounds, hasPrelims, seeds.data?.mainSlots ?? []);
 
   // First-timer hint: the earliest live, un-picked, real (non-bye) matchup.
   const hasAnyPick = bracket.rounds.some(matches => matches.some(m => !!m.pick));

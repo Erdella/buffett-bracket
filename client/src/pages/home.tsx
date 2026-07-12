@@ -130,7 +130,7 @@ export default function Home() {
               className="gap-1.5 bg-white/80 hover:bg-white/95 border-white/70 text-[hsl(195_50%_12%)] hover:text-[hsl(195_50%_12%)]"
               data-testid="button-hero-now-playing"
             >
-              <Link href={liveBracketHref}>
+              <Link href="/results">
                 Watch the live bracket <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

@@ -10,6 +10,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
+      # Served over HTTPS via the Cloudflare tunnel, so session cookies should
+      # only be sent on secure requests.
+      - COOKIE_SECURE=true
       # Set these in a .env file alongside this compose file (see .env.example)
       - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
       - SESSION_SECRET=${SESSION_SECRET}
